@@ -1,3 +1,4 @@
+class_name GeneratedTerrain
 extends MeshInstance3D
 
 ## The width terrain. Determines the amount of z-axis vertices
@@ -6,9 +7,7 @@ extends MeshInstance3D
 @export var length := 50.0
 
 func create_mesh_chunk() -> void:
-	print("creating mesh")
 	# initialize an empty surface array and resize it to expected value
-	var arr_mesh := ArrayMesh.new()
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	
@@ -21,21 +20,26 @@ func create_mesh_chunk() -> void:
 	
 	var x := 0.0
 	var z := 0.0
-	var y := 0.2
+	#var y := 0.2
 	
 	var this_row := 0
 	var prev_row := 0
 	var point := 0
 	
 	for a in (width):
+		# determine u value based on ratio relative to width
 		var u := float(a) / width
 		for b in length:
+			# determine v value based on ratio relative to length
 			var v := float(b) / length
-			var vert = Vector3(x + b, y, z + a)
+			# determine vertex position and add to vert array
+			var vert = Vector3(x + b, randf(), z + a)
 			verts.append(vert)
-			normals.append(Vector3(0,1,0))
+			# create normal. THIS IS NOT RIGHT. NEEDS TO BE ACTUALLY CALCULATED
+			normals.append(vert.normalized() * -1)
+			#normals.append(Vector3(0,1,0))
 			uvs.append(Vector2(u,v))
-			colors.append(Color(randi() % 225, randi() % 225, randi() % 225))
+			colors.append(Color.SADDLE_BROWN)
 			point += 1
 			
 			if (a > 0 and b > 0):
@@ -60,18 +64,22 @@ func create_mesh_chunk() -> void:
 	# Create mesh surface from mesh array.
 	# No blendshapes, lods, or compression used.
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mesh.surface_set_material(0, mat)
 	
 	print("mesh created")
+
+func create_mesh_collision() -> void:
+	create_multiple_convex_collisions()
 
 # Called when the node enters the scene tree for the first time.
 func _ready() -> void:
 	create_mesh_chunk()
+	create_mesh_collision()
+	# set posisiton relative to defined size
 	position.x = -length / 2
 	position.z = -width / 2
-	get_viewport().debug_draw = Viewport.DEBUG_DRAW_WIREFRAME
-	pass # Replace with function body.
-
-
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-func _process(delta: float) -> void:
-	pass
+	
+	# display in wireframe
+	#get_viewport().debug_draw = Viewport.DEBUG_DRAW_WIREFRAME
