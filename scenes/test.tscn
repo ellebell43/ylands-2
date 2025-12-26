@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3 uid="uid://cg2nh30ktqto7"]
+[gd_scene load_steps=12 format=3 uid="uid://cg2nh30ktqto7"]
 
 [ext_resource type="Script" uid="uid://but40cu6qnybu" path="res://scenes/player.gd" id="1_errlg"]
 [ext_resource type="Script" uid="uid://5nj5c3hwekck" path="res://scenes/generated_terrain.gd" id="2_bl13t"]
@@ -22,6 +22,9 @@ albedo_color = Color(0.25845554, 0.4853599, 0.38451475, 1)
 [sub_resource type="PlaneMesh" id="PlaneMesh_iyx0m"]
 material = SubResource("StandardMaterial3D_ij1v8")
 
+[sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_bl13t"]
+data = PackedVector3Array(1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0, -1, 1, 0, -1)
+
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_bl13t"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_iyx0m"]
@@ -44,11 +47,11 @@ transform = Transform3D(20, 0, 0, 0, 20, 0, 0, 0, 20, 0, 0, 0)
 visible = false
 mesh = SubResource("PlaneMesh_iyx0m")
 
-[node name="Ground" type="StaticBody3D" parent="GroundMesh"]
-collision_layer = 2
+[node name="StaticBody3D" type="StaticBody3D" parent="GroundMesh"]
+collision_mask = 2
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="GroundMesh/Ground"]
-disabled = true
+[node name="CollisionShape3D" type="CollisionShape3D" parent="GroundMesh/StaticBody3D"]
+shape = SubResource("ConcavePolygonShape3D_bl13t")
 
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2601266, 0)
