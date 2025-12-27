@@ -1,7 +1,6 @@
-[gd_scene load_steps=12 format=3 uid="uid://cg2nh30ktqto7"]
+[gd_scene load_steps=10 format=3 uid="uid://cg2nh30ktqto7"]
 
 [ext_resource type="Script" uid="uid://but40cu6qnybu" path="res://scenes/player.gd" id="1_errlg"]
-[ext_resource type="Script" uid="uid://5nj5c3hwekck" path="res://scenes/generated_terrain.gd" id="2_bl13t"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_ij1v8"]
 sky_horizon_color = Color(0.66224277, 0.6717428, 0.6867428, 1)
@@ -28,8 +27,6 @@ data = PackedVector3Array(1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0, -1, 1, 0
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_bl13t"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_iyx0m"]
-
-[sub_resource type="ArrayMesh" id="ArrayMesh_bl13t"]
 
 [node name="Node3D" type="Node3D"]
 
@@ -66,8 +63,3 @@ shape = SubResource("CapsuleShape3D_iyx0m")
 
 [node name="Camera3D" type="Camera3D" parent="Player"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.52482224, -0.46089685)
-
-[node name="GeneratedTerrain" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0.029, -1)
-mesh = SubResource("ArrayMesh_bl13t")
-script = ExtResource("2_bl13t")
