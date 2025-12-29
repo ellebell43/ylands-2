@@ -1,25 +1,33 @@
+#@tool
 # https://gameidea.org/2023/12/12/marching-cubes-algorithm/
 # https://github.com/mujtaba-io/godot-marching-cubes/blob/2291c267f9791798145a0b7c47958b74f1e6103b/Scripts/Terrain.gd#L18
 
-@tool
+class_name VoxelTerrain
 extends MeshInstance3D
 
 @export var MATERIAL := StandardMaterial3D.new()
 ## the size of the voxel terrain chunk
-@export var RESOLUTION := 100
+@export var RESOLUTION := 320
+@export var MAX_HEIGHT := 64
+## Size of each chunk
+@export var CHUNK_SIZE := 32
+## Number of chunks to render around the player
+@export var RENDER_DISTANCE := 2
 ## surface level
 @export var ISO_LEVEL := 0.0
 ## Noise used to create the shape of the terrain
-@export var NOISE: FastNoiseLite
-@export var FLAT_SHADED := false
+@export var FLAT_SHADED := true
 @export var TERRAIN_TERRACE := 1
+## Reference to the player node
+@export var PLAYER: CharacterBody3D
 
-@export var GENERATE: bool:
-	set(value):
-		var time = Time.get_ticks_msec()
-		generate()
-		var elapsed = (Time.get_ticks_msec()-time)/1000.0
-		print("Terrain generated in: " + str(elapsed) + "s")
+var voxel_grid := VoxelGrid.new(RESOLUTION)
+## Global location of the player to determine which chunks to render
+var player_position = Vector3()
+## Dictionary for storing loaded chunks
+var loaded_chunks = {}
+## Noise to use for generating terrain. Generated in _ready()
+var noise: FastNoiseLite
 
 #region Cube point and edge definitions for easier use/readability
 # vertices of a cube
@@ -323,20 +331,54 @@ class VoxelGrid:
 		self.resolution = i_resolution
 		self.data.resize(resolution*resolution*resolution)
 		self.data.fill(1.0) # Assigns a base value to all items in the data array
+		print("voxel grid object created. resolution: " + str(self.resolution) + "...")
 		
 	# Godot does not support 3D or 2D arrays, so we create an x,y,z function for reading and writing to a 1D array at the correct index
 	
 	## Get VoxelGrid data value at a specific position (x, y, z)
 	func read(x: int, y: int, z: int):
-		return self.data[x + self.resolution * (y + self.resoltuion * z)]
+		var res = self.resolution
+		return self.data[x + res * (y + res * z)]
 	
 	## Set VoxelGrid data value at a specific position (x, y, z)
 	func write(x: int, y: int, z: int, value: float):
 		self.data[x + self.resolution * (y + self.resolution * z)] = value
+		
+func _ready():
+	noise = FastNoiseLite.new()
 
+func _process(_delta: float) -> void:
+	# Update player position based on passed in reference
+	player_position = PLAYER.global_transform.origin
+	
+	# Calculate player chunk postion
+	var player_chunk_x = int(player_position.x / CHUNK_SIZE)
+	var player_chunk_z = int(player_position.z / CHUNK_SIZE)
+	
+	# Load and unload chunks based on player position
+	for x in range(player_chunk_x - RENDER_DISTANCE, player_chunk_x + RENDER_DISTANCE + 1):
+		for z in range(player_chunk_z - RENDER_DISTANCE, player_chunk_z + RENDER_DISTANCE +1):
+			var chunk_key = str(x) + "," + str(z)
+			if not loaded_chunks.has(chunk_key):
+				print("x: " + str(x) + "z: " + str(z))
+				load_chunk(x,z)
+			else:
+				# Update chunk position if it's already loaded
+				loaded_chunks[chunk_key].position.x = x * CHUNK_SIZE
+				loaded_chunks[chunk_key].position.z = z * CHUNK_SIZE
+	
+	# Unload chunks that are out of render distance
+	for key in loaded_chunks.keys():
+		var coords = key.split(",")
+		var chunk_x = int(coords[0])
+		var chunk_z = int(coords[1])
+		if abs(chunk_x - player_chunk_x) > RENDER_DISTANCE or abs(chunk_z - player_chunk_z) > RENDER_DISTANCE:
+			unload_chunk(chunk_x, chunk_z)
+
+#region Marching cube functions
 # For each position x,y,z; if the scalar value is below the surface/ISO_LEVEL, add its contribution to the index
 # Eventually, idx will be the index of the correct value in triangulation table.
-func get_triangulation(x:int, y:int, z:int, voxel_grid:VoxelGrid) -> Array[int]:
+func get_triangulation(x:int, y:int, z:int):
 	var idx = 0b00000000
 	idx |= int(voxel_grid.read(x, y, z) < ISO_LEVEL)<<0
 	idx |= int(voxel_grid.read(x, y, z+1) < ISO_LEVEL)<<1
@@ -349,15 +391,17 @@ func get_triangulation(x:int, y:int, z:int, voxel_grid:VoxelGrid) -> Array[int]:
 	return TRIANGULATIONS[idx]
 
 # Interpolate between the two vertices to place our new vertex in between
-func calculate_interpolation(a:Vector3, b:Vector3, voxel_grid:VoxelGrid) -> Vector3 :
+#func calculate_interpolation(a:Vector3, b:Vector3, voxel_grid:VoxelGrid) -> Vector3 :
+func calculate_interpolation(a:Vector3, b:Vector3) -> Vector3 :
 	var val_a = voxel_grid.read(int(a.x), int(a.y), int(a.z))
 	var val_b = voxel_grid.read(int(b.x), int(b.y), int(b.z))
 	var t = (ISO_LEVEL - val_a)/(val_b-val_a)
 	return a + t * (b - a)
 
-func march_cube(x: int, y: int, z: int, voxel_grid: VoxelGrid, vertices: PackedVector3Array):
+#func march_cube(x: int, y: int, z: int, voxel_grid: VoxelGrid, vertices: PackedVector3Array):
+func march_cube(x: int, y: int, z: int, vertices: PackedVector3Array):
 	# Get the correct configuration
-	var tri = get_triangulation(x, y, z, voxel_grid)
+	var tri = get_triangulation(x, y, z)
 	for edge_index in tri:
 		if edge_index < 0: break
 		# Get edge
@@ -369,26 +413,26 @@ func march_cube(x: int, y: int, z: int, voxel_grid: VoxelGrid, vertices: PackedV
 		var pos_a = Vector3(x + p0.x, y + p0.y, z + p0.z)
 		var pos_b = Vector3(x + p1.x, y + p1.y, z + p1.z)
 		# Interpolate between these 2 points to get our mesh's vetex position
-		var vertex_position = calculate_interpolation(pos_a, pos_b, voxel_grid)
+		var vertex_position = calculate_interpolation(pos_a, pos_b)
 		# Add our new vertex to our mesh's vertices array
 		vertices.append(vertex_position)
+#endregion
 
-func generate():
-	var voxel_grid = VoxelGrid.new(RESOLUTION)
-	
+func generate(chunk_pos: Vector3):
 	# create Scalar field
-	for x in range(voxel_grid.resolution):
-		for y in range(voxel_grid.resolution):
-			for z in range(voxel_grid.resolution):
-				var value = NOISE.get_noise_3d(x,y,z)
+	for x in range(CHUNK_SIZE):
+		for y in range(MAX_HEIGHT):
+			for z in range(CHUNK_SIZE):
+				var value = noise.get_noise_3d(x + chunk_pos.x, y + chunk_pos.y, z + chunk_pos.z)
+				#var value = NOISE.get_noise_3d(x, y, z)
 				voxel_grid.write(x, y, z, value)
-				
+	
 	# Marching the cubes
 	var vertices = PackedVector3Array()
-	for x in voxel_grid.resolution - 1:
-		for y in voxel_grid.resolution - 1:
-			for z in voxel_grid.resolution -1:
-				march_cube(x, y, z, voxel_grid, vertices)
+	for x in CHUNK_SIZE - 1:
+		for y in MAX_HEIGHT - 1:
+			for z in CHUNK_SIZE -1:
+				march_cube(x, y, z, vertices)
 	
 	# Create mesh surface and draw
 	var surface_tool = SurfaceTool.new()
@@ -404,3 +448,28 @@ func generate():
 	surface_tool.index()
 	surface_tool.set_material(MATERIAL)
 	mesh = surface_tool.commit()
+
+#region Chunk generation
+func load_chunk(x, z):
+	var chunk_mesh = generate_chunk_mesh(x, z)
+	var chunk_instance = MeshInstance3D.new()
+	chunk_instance.mesh = chunk_mesh
+	chunk_instance.position.x = x * CHUNK_SIZE
+	chunk_instance.position.z = z * CHUNK_SIZE
+	add_child(chunk_instance)
+	loaded_chunks[str(x) + "," + str(z)] = chunk_instance
+	print("Loading chunk at: " + str(x) + "," + str(z))
+
+func unload_chunk(x, z):
+	var chunk_key = str(x) + "," + str(z)
+	if loaded_chunks.has(chunk_key):
+		var chunk_instance = loaded_chunks[chunk_key]
+		chunk_instance.queue_free()
+		loaded_chunks.erase(chunk_key)
+		print("Chunk unloaded at: " + str(x) + "," + str(z))
+
+func generate_chunk_mesh(x, z):
+	# call generate function from VoxelTerrain
+	var chunk_mesh = generate(Vector3(x, 0, z) * CHUNK_SIZE)
+	return chunk_mesh
+#endregion
