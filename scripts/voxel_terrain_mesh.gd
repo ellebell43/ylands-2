@@ -336,14 +336,13 @@ func _ready() -> void:
 	print("Data from noise generated in: " + str(elapsed) + "s")
 	
 	# populate the vertices array by interpolating positions based on values in the data array
-	print(read_data(1,1,1))
 	for x in SIZE - 1:
 		for y in MAX_HEIGHT - 1:
 			for z in SIZE - 1:
 				_determine_vertices(x, y, z)
 	
 	elapsed = (Time.get_ticks_msec()-elapsed)/1000.0
-	print("Vertice generated in: " + str(elapsed) + "s")
+	print("Vertices generated in: " + str(elapsed) + "s")
 	
 	# create the mesh from the generated vertices
 	var surface_tool = SurfaceTool.new()
