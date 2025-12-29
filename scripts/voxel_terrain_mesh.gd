@@ -349,7 +349,7 @@ func _ready() -> void:
 	surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 	surface_tool.set_smooth_group(-1) # flat shading
 	for vert in vertices:
-		surface_tool.set_color(Color.ROYAL_BLUE)
+		surface_tool.set_color(Color.MEDIUM_PURPLE)
 		surface_tool.add_vertex(vert)
 	surface_tool.generate_normals()
 	surface_tool.index()
