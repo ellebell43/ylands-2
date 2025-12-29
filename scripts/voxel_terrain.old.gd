@@ -2,7 +2,7 @@
 # https://gameidea.org/2023/12/12/marching-cubes-algorithm/
 # https://github.com/mujtaba-io/godot-marching-cubes/blob/2291c267f9791798145a0b7c47958b74f1e6103b/Scripts/Terrain.gd#L18
 
-class_name VoxelTerrain
+#class_name VoxelTerrain
 extends MeshInstance3D
 
 @export var MATERIAL := StandardMaterial3D.new()
