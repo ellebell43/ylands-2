@@ -1,394 +1,232 @@
-class_name VoxelTerrainMesh
+@tool
 extends MeshInstance3D
 
-## x and z lengths of the 3D area for the mesh
-@export var SIZE: int = 255
-## y length of the 3D area
-@export var MAX_HEIGHT: int = 255
-## Threshold to determine what is above/below the surface of the mesh
-@export var SURFACE_VALUE: float = 0.0
-## Noise map that determines the is used to populate the data array
-@export var NOISE: FastNoiseLite = FastNoiseLite.new()
 
-## An array that holds the scalar field data that determines the shape of the mesh
-var data: PackedFloat32Array = []
-## An array that holds the positions of all the vertices in the array
-var vertices = PackedVector3Array()
-## An array that holds the colors for each vertex. CURRENTLY UNUSED. Color is determine during the SurfaceTool phase at the bottom of _ready()
-var vert_colors = PackedVector4Array()
+var rd = RenderingServer.create_local_rendering_device()
+var pipeline : RID
+var shader : RID
+var buffers: Array
+var uniform_set : RID
+const uniform_set_index : int = 0
 
-#region Cube point and edge definitions
-# vertices of a cube
-const POINTS: PackedVector3Array = [
-	Vector3i(0, 0, 0),
-	Vector3i(0, 0, 1),
-	Vector3i(1, 0, 1),
-	Vector3i(1, 0, 0),
-	Vector3i(0, 1, 0),
-	Vector3i(0, 1, 1),
-	Vector3i(1, 1, 1),
-	Vector3i(1, 1, 0),
-]
+var output
 
-# Each edge represents pair of 2 verts. 
-# EDGES[0] represents first and second vertex in POINTS array
-const EDGES: PackedVector2Array = [
-	Vector2i(0, 1),
-	Vector2i(1, 2),
-	Vector2i(2, 3),
-	Vector2i(3, 0),
-	Vector2i(4, 5),
-	Vector2i(5, 6),
-	Vector2i(6, 7),
-	Vector2i(7, 4),
-	Vector2i(0, 4),
-	Vector2i(1, 5),
-	Vector2i(2, 6),
-	Vector2i(3, 7),
-]
-#endregion
+var data : Texture3D
+@export var SIZE : Vector3i = Vector3i(256, 256, 256)
+@export var ISO:float = 0.1
+@export var FLAT_SHADED:bool = false
 
-#region Triangle definitions (256 combinations of geometry)
-const TRIANGULATIONS: Array = [
-[-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 8, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 1, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[1, 8, 3, 9, 8, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[1, 2, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 8, 3, 1, 2, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[9, 2, 10, 0, 2, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[2, 8, 3, 2, 10, 8, 10, 9, 8, -1, -1, -1, -1, -1, -1, -1],
-[3, 11, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 11, 2, 8, 11, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[1, 9, 0, 2, 3, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[1, 11, 2, 1, 9, 11, 9, 8, 11, -1, -1, -1, -1, -1, -1, -1],
-[3, 10, 1, 11, 10, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 10, 1, 0, 8, 10, 8, 11, 10, -1, -1, -1, -1, -1, -1, -1],
-[3, 9, 0, 3, 11, 9, 11, 10, 9, -1, -1, -1, -1, -1, -1, -1],
-[9, 8, 10, 10, 8, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[4, 7, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[4, 3, 0, 7, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 1, 9, 8, 4, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[4, 1, 9, 4, 7, 1, 7, 3, 1, -1, -1, -1, -1, -1, -1, -1],
-[1, 2, 10, 8, 4, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[3, 4, 7, 3, 0, 4, 1, 2, 10, -1, -1, -1, -1, -1, -1, -1],
-[9, 2, 10, 9, 0, 2, 8, 4, 7, -1, -1, -1, -1, -1, -1, -1],
-[2, 10, 9, 2, 9, 7, 2, 7, 3, 7, 9, 4, -1, -1, -1, -1],
-[8, 4, 7, 3, 11, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[11, 4, 7, 11, 2, 4, 2, 0, 4, -1, -1, -1, -1, -1, -1, -1],
-[9, 0, 1, 8, 4, 7, 2, 3, 11, -1, -1, -1, -1, -1, -1, -1],
-[4, 7, 11, 9, 4, 11, 9, 11, 2, 9, 2, 1, -1, -1, -1, -1],
-[3, 10, 1, 3, 11, 10, 7, 8, 4, -1, -1, -1, -1, -1, -1, -1],
-[1, 11, 10, 1, 4, 11, 1, 0, 4, 7, 11, 4, -1, -1, -1, -1],
-[4, 7, 8, 9, 0, 11, 9, 11, 10, 11, 0, 3, -1, -1, -1, -1],
-[4, 7, 11, 4, 11, 9, 9, 11, 10, -1, -1, -1, -1, -1, -1, -1],
-[9, 5, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[9, 5, 4, 0, 8, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 5, 4, 1, 5, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[8, 5, 4, 8, 3, 5, 3, 1, 5, -1, -1, -1, -1, -1, -1, -1],
-[1, 2, 10, 9, 5, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[3, 0, 8, 1, 2, 10, 4, 9, 5, -1, -1, -1, -1, -1, -1, -1],
-[5, 2, 10, 5, 4, 2, 4, 0, 2, -1, -1, -1, -1, -1, -1, -1],
-[2, 10, 5, 3, 2, 5, 3, 5, 4, 3, 4, 8, -1, -1, -1, -1],
-[9, 5, 4, 2, 3, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 11, 2, 0, 8, 11, 4, 9, 5, -1, -1, -1, -1, -1, -1, -1],
-[0, 5, 4, 0, 1, 5, 2, 3, 11, -1, -1, -1, -1, -1, -1, -1],
-[2, 1, 5, 2, 5, 8, 2, 8, 11, 4, 8, 5, -1, -1, -1, -1],
-[10, 3, 11, 10, 1, 3, 9, 5, 4, -1, -1, -1, -1, -1, -1, -1],
-[4, 9, 5, 0, 8, 1, 8, 10, 1, 8, 11, 10, -1, -1, -1, -1],
-[5, 4, 0, 5, 0, 11, 5, 11, 10, 11, 0, 3, -1, -1, -1, -1],
-[5, 4, 8, 5, 8, 10, 10, 8, 11, -1, -1, -1, -1, -1, -1, -1],
-[9, 7, 8, 5, 7, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[9, 3, 0, 9, 5, 3, 5, 7, 3, -1, -1, -1, -1, -1, -1, -1],
-[0, 7, 8, 0, 1, 7, 1, 5, 7, -1, -1, -1, -1, -1, -1, -1],
-[1, 5, 3, 3, 5, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[9, 7, 8, 9, 5, 7, 10, 1, 2, -1, -1, -1, -1, -1, -1, -1],
-[10, 1, 2, 9, 5, 0, 5, 3, 0, 5, 7, 3, -1, -1, -1, -1],
-[8, 0, 2, 8, 2, 5, 8, 5, 7, 10, 5, 2, -1, -1, -1, -1],
-[2, 10, 5, 2, 5, 3, 3, 5, 7, -1, -1, -1, -1, -1, -1, -1],
-[7, 9, 5, 7, 8, 9, 3, 11, 2, -1, -1, -1, -1, -1, -1, -1],
-[9, 5, 7, 9, 7, 2, 9, 2, 0, 2, 7, 11, -1, -1, -1, -1],
-[2, 3, 11, 0, 1, 8, 1, 7, 8, 1, 5, 7, -1, -1, -1, -1],
-[11, 2, 1, 11, 1, 7, 7, 1, 5, -1, -1, -1, -1, -1, -1, -1],
-[9, 5, 8, 8, 5, 7, 10, 1, 3, 10, 3, 11, -1, -1, -1, -1],
-[5, 7, 0, 5, 0, 9, 7, 11, 0, 1, 0, 10, 11, 10, 0, -1],
-[11, 10, 0, 11, 0, 3, 10, 5, 0, 8, 0, 7, 5, 7, 0, -1],
-[11, 10, 5, 7, 11, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[10, 6, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 8, 3, 5, 10, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[9, 0, 1, 5, 10, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[1, 8, 3, 1, 9, 8, 5, 10, 6, -1, -1, -1, -1, -1, -1, -1],
-[1, 6, 5, 2, 6, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[1, 6, 5, 1, 2, 6, 3, 0, 8, -1, -1, -1, -1, -1, -1, -1],
-[9, 6, 5, 9, 0, 6, 0, 2, 6, -1, -1, -1, -1, -1, -1, -1],
-[5, 9, 8, 5, 8, 2, 5, 2, 6, 3, 2, 8, -1, -1, -1, -1],
-[2, 3, 11, 10, 6, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[11, 0, 8, 11, 2, 0, 10, 6, 5, -1, -1, -1, -1, -1, -1, -1],
-[0, 1, 9, 2, 3, 11, 5, 10, 6, -1, -1, -1, -1, -1, -1, -1],
-[5, 10, 6, 1, 9, 2, 9, 11, 2, 9, 8, 11, -1, -1, -1, -1],
-[6, 3, 11, 6, 5, 3, 5, 1, 3, -1, -1, -1, -1, -1, -1, -1],
-[0, 8, 11, 0, 11, 5, 0, 5, 1, 5, 11, 6, -1, -1, -1, -1],
-[3, 11, 6, 0, 3, 6, 0, 6, 5, 0, 5, 9, -1, -1, -1, -1],
-[6, 5, 9, 6, 9, 11, 11, 9, 8, -1, -1, -1, -1, -1, -1, -1],
-[5, 10, 6, 4, 7, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[4, 3, 0, 4, 7, 3, 6, 5, 10, -1, -1, -1, -1, -1, -1, -1],
-[1, 9, 0, 5, 10, 6, 8, 4, 7, -1, -1, -1, -1, -1, -1, -1],
-[10, 6, 5, 1, 9, 7, 1, 7, 3, 7, 9, 4, -1, -1, -1, -1],
-[6, 1, 2, 6, 5, 1, 4, 7, 8, -1, -1, -1, -1, -1, -1, -1],
-[1, 2, 5, 5, 2, 6, 3, 0, 4, 3, 4, 7, -1, -1, -1, -1],
-[8, 4, 7, 9, 0, 5, 0, 6, 5, 0, 2, 6, -1, -1, -1, -1],
-[7, 3, 9, 7, 9, 4, 3, 2, 9, 5, 9, 6, 2, 6, 9, -1],
-[3, 11, 2, 7, 8, 4, 10, 6, 5, -1, -1, -1, -1, -1, -1, -1],
-[5, 10, 6, 4, 7, 2, 4, 2, 0, 2, 7, 11, -1, -1, -1, -1],
-[0, 1, 9, 4, 7, 8, 2, 3, 11, 5, 10, 6, -1, -1, -1, -1],
-[9, 2, 1, 9, 11, 2, 9, 4, 11, 7, 11, 4, 5, 10, 6, -1],
-[8, 4, 7, 3, 11, 5, 3, 5, 1, 5, 11, 6, -1, -1, -1, -1],
-[5, 1, 11, 5, 11, 6, 1, 0, 11, 7, 11, 4, 0, 4, 11, -1],
-[0, 5, 9, 0, 6, 5, 0, 3, 6, 11, 6, 3, 8, 4, 7, -1],
-[6, 5, 9, 6, 9, 11, 4, 7, 9, 7, 11, 9, -1, -1, -1, -1],
-[10, 4, 9, 6, 4, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[4, 10, 6, 4, 9, 10, 0, 8, 3, -1, -1, -1, -1, -1, -1, -1],
-[10, 0, 1, 10, 6, 0, 6, 4, 0, -1, -1, -1, -1, -1, -1, -1],
-[8, 3, 1, 8, 1, 6, 8, 6, 4, 6, 1, 10, -1, -1, -1, -1],
-[1, 4, 9, 1, 2, 4, 2, 6, 4, -1, -1, -1, -1, -1, -1, -1],
-[3, 0, 8, 1, 2, 9, 2, 4, 9, 2, 6, 4, -1, -1, -1, -1],
-[0, 2, 4, 4, 2, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[8, 3, 2, 8, 2, 4, 4, 2, 6, -1, -1, -1, -1, -1, -1, -1],
-[10, 4, 9, 10, 6, 4, 11, 2, 3, -1, -1, -1, -1, -1, -1, -1],
-[0, 8, 2, 2, 8, 11, 4, 9, 10, 4, 10, 6, -1, -1, -1, -1],
-[3, 11, 2, 0, 1, 6, 0, 6, 4, 6, 1, 10, -1, -1, -1, -1],
-[6, 4, 1, 6, 1, 10, 4, 8, 1, 2, 1, 11, 8, 11, 1, -1],
-[9, 6, 4, 9, 3, 6, 9, 1, 3, 11, 6, 3, -1, -1, -1, -1],
-[8, 11, 1, 8, 1, 0, 11, 6, 1, 9, 1, 4, 6, 4, 1, -1],
-[3, 11, 6, 3, 6, 0, 0, 6, 4, -1, -1, -1, -1, -1, -1, -1],
-[6, 4, 8, 11, 6, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[7, 10, 6, 7, 8, 10, 8, 9, 10, -1, -1, -1, -1, -1, -1, -1],
-[0, 7, 3, 0, 10, 7, 0, 9, 10, 6, 7, 10, -1, -1, -1, -1],
-[10, 6, 7, 1, 10, 7, 1, 7, 8, 1, 8, 0, -1, -1, -1, -1],
-[10, 6, 7, 10, 7, 1, 1, 7, 3, -1, -1, -1, -1, -1, -1, -1],
-[1, 2, 6, 1, 6, 8, 1, 8, 9, 8, 6, 7, -1, -1, -1, -1],
-[2, 6, 9, 2, 9, 1, 6, 7, 9, 0, 9, 3, 7, 3, 9, -1],
-[7, 8, 0, 7, 0, 6, 6, 0, 2, -1, -1, -1, -1, -1, -1, -1],
-[7, 3, 2, 6, 7, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[2, 3, 11, 10, 6, 8, 10, 8, 9, 8, 6, 7, -1, -1, -1, -1],
-[2, 0, 7, 2, 7, 11, 0, 9, 7, 6, 7, 10, 9, 10, 7, -1],
-[1, 8, 0, 1, 7, 8, 1, 10, 7, 6, 7, 10, 2, 3, 11, -1],
-[11, 2, 1, 11, 1, 7, 10, 6, 1, 6, 7, 1, -1, -1, -1, -1],
-[8, 9, 6, 8, 6, 7, 9, 1, 6, 11, 6, 3, 1, 3, 6, -1],
-[0, 9, 1, 11, 6, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[7, 8, 0, 7, 0, 6, 3, 11, 0, 11, 6, 0, -1, -1, -1, -1],
-[7, 11, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[7, 6, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[3, 0, 8, 11, 7, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 1, 9, 11, 7, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[8, 1, 9, 8, 3, 1, 11, 7, 6, -1, -1, -1, -1, -1, -1, -1],
-[10, 1, 2, 6, 11, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[1, 2, 10, 3, 0, 8, 6, 11, 7, -1, -1, -1, -1, -1, -1, -1],
-[2, 9, 0, 2, 10, 9, 6, 11, 7, -1, -1, -1, -1, -1, -1, -1],
-[6, 11, 7, 2, 10, 3, 10, 8, 3, 10, 9, 8, -1, -1, -1, -1],
-[7, 2, 3, 6, 2, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[7, 0, 8, 7, 6, 0, 6, 2, 0, -1, -1, -1, -1, -1, -1, -1],
-[2, 7, 6, 2, 3, 7, 0, 1, 9, -1, -1, -1, -1, -1, -1, -1],
-[1, 6, 2, 1, 8, 6, 1, 9, 8, 8, 7, 6, -1, -1, -1, -1],
-[10, 7, 6, 10, 1, 7, 1, 3, 7, -1, -1, -1, -1, -1, -1, -1],
-[10, 7, 6, 1, 7, 10, 1, 8, 7, 1, 0, 8, -1, -1, -1, -1],
-[0, 3, 7, 0, 7, 10, 0, 10, 9, 6, 10, 7, -1, -1, -1, -1],
-[7, 6, 10, 7, 10, 8, 8, 10, 9, -1, -1, -1, -1, -1, -1, -1],
-[6, 8, 4, 11, 8, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[3, 6, 11, 3, 0, 6, 0, 4, 6, -1, -1, -1, -1, -1, -1, -1],
-[8, 6, 11, 8, 4, 6, 9, 0, 1, -1, -1, -1, -1, -1, -1, -1],
-[9, 4, 6, 9, 6, 3, 9, 3, 1, 11, 3, 6, -1, -1, -1, -1],
-[6, 8, 4, 6, 11, 8, 2, 10, 1, -1, -1, -1, -1, -1, -1, -1],
-[1, 2, 10, 3, 0, 11, 0, 6, 11, 0, 4, 6, -1, -1, -1, -1],
-[4, 11, 8, 4, 6, 11, 0, 2, 9, 2, 10, 9, -1, -1, -1, -1],
-[10, 9, 3, 10, 3, 2, 9, 4, 3, 11, 3, 6, 4, 6, 3, -1],
-[8, 2, 3, 8, 4, 2, 4, 6, 2, -1, -1, -1, -1, -1, -1, -1],
-[0, 4, 2, 4, 6, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[1, 9, 0, 2, 3, 4, 2, 4, 6, 4, 3, 8, -1, -1, -1, -1],
-[1, 9, 4, 1, 4, 2, 2, 4, 6, -1, -1, -1, -1, -1, -1, -1],
-[8, 1, 3, 8, 6, 1, 8, 4, 6, 6, 10, 1, -1, -1, -1, -1],
-[10, 1, 0, 10, 0, 6, 6, 0, 4, -1, -1, -1, -1, -1, -1, -1],
-[4, 6, 3, 4, 3, 8, 6, 10, 3, 0, 3, 9, 10, 9, 3, -1],
-[10, 9, 4, 6, 10, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[4, 9, 5, 7, 6, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 8, 3, 4, 9, 5, 11, 7, 6, -1, -1, -1, -1, -1, -1, -1],
-[5, 0, 1, 5, 4, 0, 7, 6, 11, -1, -1, -1, -1, -1, -1, -1],
-[11, 7, 6, 8, 3, 4, 3, 5, 4, 3, 1, 5, -1, -1, -1, -1],
-[9, 5, 4, 10, 1, 2, 7, 6, 11, -1, -1, -1, -1, -1, -1, -1],
-[6, 11, 7, 1, 2, 10, 0, 8, 3, 4, 9, 5, -1, -1, -1, -1],
-[7, 6, 11, 5, 4, 10, 4, 2, 10, 4, 0, 2, -1, -1, -1, -1],
-[3, 4, 8, 3, 5, 4, 3, 2, 5, 10, 5, 2, 11, 7, 6, -1],
-[7, 2, 3, 7, 6, 2, 5, 4, 9, -1, -1, -1, -1, -1, -1, -1],
-[9, 5, 4, 0, 8, 6, 0, 6, 2, 6, 8, 7, -1, -1, -1, -1],
-[3, 6, 2, 3, 7, 6, 1, 5, 0, 5, 4, 0, -1, -1, -1, -1],
-[6, 2, 8, 6, 8, 7, 2, 1, 8, 4, 8, 5, 1, 5, 8, -1],
-[9, 5, 4, 10, 1, 6, 1, 7, 6, 1, 3, 7, -1, -1, -1, -1],
-[1, 6, 10, 1, 7, 6, 1, 0, 7, 8, 7, 0, 9, 5, 4, -1],
-[4, 0, 10, 4, 10, 5, 0, 3, 10, 6, 10, 7, 3, 7, 10, -1],
-[7, 6, 10, 7, 10, 8, 5, 4, 10, 4, 8, 10, -1, -1, -1, -1],
-[6, 9, 5, 6, 11, 9, 11, 8, 9, -1, -1, -1, -1, -1, -1, -1],
-[3, 6, 11, 0, 6, 3, 0, 5, 6, 0, 9, 5, -1, -1, -1, -1],
-[0, 11, 8, 0, 5, 11, 0, 1, 5, 5, 6, 11, -1, -1, -1, -1],
-[6, 11, 3, 6, 3, 5, 5, 3, 1, -1, -1, -1, -1, -1, -1, -1],
-[1, 2, 10, 9, 5, 11, 9, 11, 8, 11, 5, 6, -1, -1, -1, -1],
-[0, 11, 3, 0, 6, 11, 0, 9, 6, 5, 6, 9, 1, 2, 10, -1],
-[11, 8, 5, 11, 5, 6, 8, 0, 5, 10, 5, 2, 0, 2, 5, -1],
-[6, 11, 3, 6, 3, 5, 2, 10, 3, 10, 5, 3, -1, -1, -1, -1],
-[5, 8, 9, 5, 2, 8, 5, 6, 2, 3, 8, 2, -1, -1, -1, -1],
-[9, 5, 6, 9, 6, 0, 0, 6, 2, -1, -1, -1, -1, -1, -1, -1],
-[1, 5, 8, 1, 8, 0, 5, 6, 8, 3, 8, 2, 6, 2, 8, -1],
-[1, 5, 6, 2, 1, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[1, 3, 6, 1, 6, 10, 3, 8, 6, 5, 6, 9, 8, 9, 6, -1],
-[10, 1, 0, 10, 0, 6, 9, 5, 0, 5, 6, 0, -1, -1, -1, -1],
-[0, 3, 8, 5, 6, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[10, 5, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[11, 5, 10, 7, 5, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[11, 5, 10, 11, 7, 5, 8, 3, 0, -1, -1, -1, -1, -1, -1, -1],
-[5, 11, 7, 5, 10, 11, 1, 9, 0, -1, -1, -1, -1, -1, -1, -1],
-[10, 7, 5, 10, 11, 7, 9, 8, 1, 8, 3, 1, -1, -1, -1, -1],
-[11, 1, 2, 11, 7, 1, 7, 5, 1, -1, -1, -1, -1, -1, -1, -1],
-[0, 8, 3, 1, 2, 7, 1, 7, 5, 7, 2, 11, -1, -1, -1, -1],
-[9, 7, 5, 9, 2, 7, 9, 0, 2, 2, 11, 7, -1, -1, -1, -1],
-[7, 5, 2, 7, 2, 11, 5, 9, 2, 3, 2, 8, 9, 8, 2, -1],
-[2, 5, 10, 2, 3, 5, 3, 7, 5, -1, -1, -1, -1, -1, -1, -1],
-[8, 2, 0, 8, 5, 2, 8, 7, 5, 10, 2, 5, -1, -1, -1, -1],
-[9, 0, 1, 5, 10, 3, 5, 3, 7, 3, 10, 2, -1, -1, -1, -1],
-[9, 8, 2, 9, 2, 1, 8, 7, 2, 10, 2, 5, 7, 5, 2, -1],
-[1, 3, 5, 3, 7, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 8, 7, 0, 7, 1, 1, 7, 5, -1, -1, -1, -1, -1, -1, -1],
-[9, 0, 3, 9, 3, 5, 5, 3, 7, -1, -1, -1, -1, -1, -1, -1],
-[9, 8, 7, 5, 9, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[5, 8, 4, 5, 10, 8, 10, 11, 8, -1, -1, -1, -1, -1, -1, -1],
-[5, 0, 4, 5, 11, 0, 5, 10, 11, 11, 3, 0, -1, -1, -1, -1],
-[0, 1, 9, 8, 4, 10, 8, 10, 11, 10, 4, 5, -1, -1, -1, -1],
-[10, 11, 4, 10, 4, 5, 11, 3, 4, 9, 4, 1, 3, 1, 4, -1],
-[2, 5, 1, 2, 8, 5, 2, 11, 8, 4, 5, 8, -1, -1, -1, -1],
-[0, 4, 11, 0, 11, 3, 4, 5, 11, 2, 11, 1, 5, 1, 11, -1],
-[0, 2, 5, 0, 5, 9, 2, 11, 5, 4, 5, 8, 11, 8, 5, -1],
-[9, 4, 5, 2, 11, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[2, 5, 10, 3, 5, 2, 3, 4, 5, 3, 8, 4, -1, -1, -1, -1],
-[5, 10, 2, 5, 2, 4, 4, 2, 0, -1, -1, -1, -1, -1, -1, -1],
-[3, 10, 2, 3, 5, 10, 3, 8, 5, 4, 5, 8, 0, 1, 9, -1],
-[5, 10, 2, 5, 2, 4, 1, 9, 2, 9, 4, 2, -1, -1, -1, -1],
-[8, 4, 5, 8, 5, 3, 3, 5, 1, -1, -1, -1, -1, -1, -1, -1],
-[0, 4, 5, 1, 0, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[8, 4, 5, 8, 5, 3, 9, 0, 5, 0, 3, 5, -1, -1, -1, -1],
-[9, 4, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[4, 11, 7, 4, 9, 11, 9, 10, 11, -1, -1, -1, -1, -1, -1, -1],
-[0, 8, 3, 4, 9, 7, 9, 11, 7, 9, 10, 11, -1, -1, -1, -1],
-[1, 10, 11, 1, 11, 4, 1, 4, 0, 7, 4, 11, -1, -1, -1, -1],
-[3, 1, 4, 3, 4, 8, 1, 10, 4, 7, 4, 11, 10, 11, 4, -1],
-[4, 11, 7, 9, 11, 4, 9, 2, 11, 9, 1, 2, -1, -1, -1, -1],
-[9, 7, 4, 9, 11, 7, 9, 1, 11, 2, 11, 1, 0, 8, 3, -1],
-[11, 7, 4, 11, 4, 2, 2, 4, 0, -1, -1, -1, -1, -1, -1, -1],
-[11, 7, 4, 11, 4, 2, 8, 3, 4, 3, 2, 4, -1, -1, -1, -1],
-[2, 9, 10, 2, 7, 9, 2, 3, 7, 7, 4, 9, -1, -1, -1, -1],
-[9, 10, 7, 9, 7, 4, 10, 2, 7, 8, 7, 0, 2, 0, 7, -1],
-[3, 7, 10, 3, 10, 2, 7, 4, 10, 1, 10, 0, 4, 0, 10, -1],
-[1, 10, 2, 8, 7, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[4, 9, 1, 4, 1, 7, 7, 1, 3, -1, -1, -1, -1, -1, -1, -1],
-[4, 9, 1, 4, 1, 7, 0, 8, 1, 8, 7, 1, -1, -1, -1, -1],
-[4, 0, 3, 7, 4, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[4, 8, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[9, 10, 8, 10, 11, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[3, 0, 9, 3, 9, 11, 11, 9, 10, -1, -1, -1, -1, -1, -1, -1],
-[0, 1, 10, 0, 10, 8, 8, 10, 11, -1, -1, -1, -1, -1, -1, -1],
-[3, 1, 10, 11, 3, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[1, 2, 11, 1, 11, 9, 9, 11, 8, -1, -1, -1, -1, -1, -1, -1],
-[3, 0, 9, 3, 9, 11, 1, 2, 9, 2, 11, 9, -1, -1, -1, -1],
-[0, 2, 11, 8, 0, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[3, 2, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[2, 3, 8, 2, 8, 10, 10, 8, 9, -1, -1, -1, -1, -1, -1, -1],
-[9, 10, 2, 0, 9, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[2, 3, 8, 2, 8, 10, 0, 1, 8, 1, 10, 8, -1, -1, -1, -1],
-[1, 10, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[1, 3, 8, 9, 1, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 9, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[0, 3, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
-[-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]]
-#endregion
+@export var GENERATE: bool:
+	set(value):
+		var time = Time.get_ticks_msec()
+		compute()
+		var elapsed = (Time.get_ticks_msec()-time)/1000.0
+		print("Terrain generated in: " + str(elapsed) + "s")
 
-# Godot does not support 3D or 2D arrays, so we create an x,y,z function for reading and writing to a 1D array at the correct index
-## Get VoxelGrid data value at a specific position (x, y, z)
-func read_data(x: int, y: int, z: int) -> float:
-	return data[x + SIZE * (y + SIZE * z)]
-
-## Set VoxelGrid data value at a specific position (x, y, z)
-func write_data(x: int, y: int, z: int, value: float) -> void:
-	data[x + SIZE * (y + SIZE * z)] = value
-
-func _ready() -> void:
-	var time = Time.get_ticks_msec()
-	#var viewport := get_viewport()
-	#viewport.debug_draw = Viewport.DEBUG_DRAW_WIREFRAME
-	NOISE = FastNoiseLite.new()
+# Called when the node enters the scene tree for the first time.
+func _ready():
+	data = _create_data(SIZE)
+	init_compute()
+	setup_bindings()
 	
-	print("mesh gen start")
-	data.resize(SIZE * MAX_HEIGHT * SIZE) # resize data array to specified size
-	# populate the data array by extracting values from NOISE
-	for x in SIZE:
-		for y in MAX_HEIGHT:
-			for z in SIZE:
-				var value := NOISE.get_noise_3d(x, y, z)
-				write_data(x, y, z, value)
+## Generates a noise volume at a specfied size, then returns that nose as a Texture3D object
+func _create_data(size: Vector3i) -> Texture3D:
+	print("creating data")
+	# create and configure noise
+	var noise = FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_PERLIN
+	print("noise created")
 	
-	var elapsed = (Time.get_ticks_msec()-time)/1000.0
-	print("Data from noise generated in: " + str(elapsed) + "s")
+	# create image array from 3d noise volume
+	# invert=false, normalize=true
+	var img_array : Array[Image] = noise.get_image_3d(size.x, size.y, size.z, false, true)
+	print("image array created")
 	
-	# populate the vertices array by interpolating positions based on values in the data array
-	for x in SIZE - 1:
-		for y in MAX_HEIGHT - 1:
-			for z in SIZE - 1:
-				_determine_vertices(x, y, z)
+	# create texture3d from 3d image
+	# use_mipmaps=false
+	var tex3d = ImageTexture3D.new()
+	print(img_array[0].get_format())
+	tex3d.create(img_array[0].get_format(), size.x, size.y, size.z, false, img_array)
+	print("Texture3D created")
+	return tex3d
+
+func _notification(type):
+	if type == NOTIFICATION_PREDELETE:
+		release()
+
+func init_compute():
+	# Create shader and pipeline
+	var shader_file = load("res://shaders/marching_cubes.glsl")
+	var shader_spirv = shader_file.get_spirv()
+	shader = rd.shader_create_from_spirv(shader_spirv)
+	pipeline = rd.compute_pipeline_create(shader)
+
+func release():
+	for b in buffers:
+		rd.free_rid(b)
+	buffers.clear()
 	
-	elapsed = (Time.get_ticks_msec()-elapsed)/1000.0
-	print("Vertices generated in: " + str(elapsed) + "s")
+	rd.free_rid(pipeline)
+	rd.free_rid(shader)
+	rd.free()
+
+func get_params():
+	var voxel_grid_size := Vector3(data.get_width(), data.get_height(), data.get_width())
+	var voxel_grid := MarchingCubes.VoxelGrid.new(voxel_grid_size)
+	voxel_grid.set_data(data)
 	
-	# create the mesh from the generated vertices
+	var params = PackedFloat32Array()
+	params.append(voxel_grid_size.x)
+	params.append(voxel_grid_size.y)
+	params.append(voxel_grid_size.z)
+	params.append(ISO)
+	params.append(int(FLAT_SHADED))
+	
+	params.append_array(voxel_grid.data)
+	
+	return params
+
+func setup_bindings():
+	# Create the input params buffer
+	var input = get_params()
+	var input_bytes = input.to_byte_array()
+	buffers.push_back(rd.storage_buffer_create(input_bytes.size(), input_bytes))
+	
+	var input_params_uniform := RDUniform.new()
+	input_params_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
+	input_params_uniform.binding = 0
+	input_params_uniform.add_id(buffers[0])
+	
+	# Create counter buffer
+	var counter_bytes = PackedFloat32Array([0]).to_byte_array()
+	buffers.push_back(rd.storage_buffer_create(counter_bytes.size(), counter_bytes))
+	
+	var counter_uniform = RDUniform.new()
+	counter_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
+	counter_uniform.binding = 1
+	counter_uniform.add_id(buffers[1])
+
+	# Create the triangles buffer
+	var total_cells = data.get_width() * data.get_height() * data.get_depth()
+	var vertices = PackedColorArray()
+	vertices.resize(total_cells * 5 * (3 + 1)) # 5 triangles max per cell, 3 vertices and 1 normal per triangle
+	var vertices_bytes = vertices.to_byte_array()
+	buffers.push_back(rd.storage_buffer_create(vertices_bytes.size(), vertices_bytes))
+	
+	var vertices_uniform := RDUniform.new()
+	vertices_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
+	vertices_uniform.binding = 2
+	vertices_uniform.add_id(buffers[2])
+
+	# Create the LUT buffer
+	var lut_array = PackedInt32Array()
+	for i in range(MarchingCubes.LUT.size()):
+		lut_array.append_array(MarchingCubes.LUT[i])
+	var lut_array_bytes = lut_array.to_byte_array()
+	buffers.push_back(rd.storage_buffer_create(lut_array_bytes.size(), lut_array_bytes))
+
+	var lut_uniform := RDUniform.new()
+	lut_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
+	lut_uniform.binding = 3
+	lut_uniform.add_id(buffers[3])
+
+	uniform_set = rd.uniform_set_create([
+		input_params_uniform,
+		counter_uniform,
+		vertices_uniform,
+		lut_uniform,
+	], shader, uniform_set_index)
+
+
+func compute():
+	# Update input buffers and clear output ones
+	# This one is actually not always needed. Comment to see major speed optimization
+	var time_send: int = Time.get_ticks_usec()
+	var input = get_params()
+	var input_bytes = input.to_byte_array()
+	rd.buffer_update(buffers[0], 0, input_bytes.size(), input_bytes)
+
+	var total_cells = data.get_width() * data.get_height() * data.get_depth()
+	var vertices = PackedColorArray()
+	vertices.resize(total_cells * 5 * (3 + 1)) # 5 triangles max per cell, 3 vertices and 1 normal per triangle
+	var vertices_bytes = vertices.to_byte_array()
+
+	var counter_bytes = PackedFloat32Array([0]).to_byte_array()
+	rd.buffer_update(buffers[1], 0, counter_bytes.size(), counter_bytes)
+	print("Time to update buffer: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
+
+	# Dispatch compute and uniforms
+	time_send = Time.get_ticks_usec()
+	var compute_list := rd.compute_list_begin()
+	rd.compute_list_bind_compute_pipeline(compute_list, pipeline)
+	rd.compute_list_bind_uniform_set(compute_list, uniform_set, uniform_set_index)
+	rd.compute_list_dispatch(compute_list, data.get_width() / 8, data.get_height() / 8, data.get_depth() / 8)
+	rd.compute_list_end()
+	print("Time to dispatch uniforms: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
+
+	# Submit to GPU and wait for sync
+	time_send = Time.get_ticks_usec()
+	rd.submit()
+	rd.sync()
+	print("Time to submit and sync: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
+
+	# Read back the data from the buffer
+	time_send = Time.get_ticks_usec()
+	var total_triangles = rd.buffer_get_data(buffers[1]).to_int32_array()[0]
+	var output_array := rd.buffer_get_data(buffers[2]).to_float32_array()
+	print("Time to read back buffer: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
+
+	time_send = Time.get_ticks_usec()
+	output = {
+		"vertices": PackedVector3Array(),
+		"normals": PackedVector3Array(),
+	}
+
+	for i in range(0, total_triangles * 16, 16): # Each triangle spans for 16 floats
+		output["vertices"].push_back(Vector3(output_array[i+0], output_array[i+1], output_array[i+2]))
+		output["vertices"].push_back(Vector3(output_array[i+4], output_array[i+5], output_array[i+6]))
+		output["vertices"].push_back(Vector3(output_array[i+8], output_array[i+9], output_array[i+10]))
+
+		var normal = Vector3(output_array[i+12], output_array[i+13], output_array[i+14])
+		# Each vector will point to the same normal
+		for j in range(3):
+			output["normals"].push_back(normal)
+
+	print("Time iterate vertices: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
+	print("Total vertices ", output["vertices"].size())
+
+	create_mesh()
+
+func create_mesh():
+	var time_send: int = Time.get_ticks_usec()
+	create_mesh_with_array()
+	print("Time to create with array mesh: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
+
+	time_send = Time.get_ticks_usec()
+	create_mesh_with_surface()
+	print("Time to create with surface tool: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
+
+func create_mesh_with_array():
+	var mesh_data = []
+	mesh_data.resize(Mesh.ARRAY_MAX)
+	mesh_data[Mesh.ARRAY_VERTEX] = output["vertices"]
+	mesh_data[Mesh.ARRAY_NORMAL] = output["normals"]
+
+	var array_mesh = ArrayMesh.new()
+	array_mesh.clear_surfaces()
+	array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, mesh_data)
+	call_deferred("set_mesh", array_mesh)
+
+func create_mesh_with_surface():
 	var surface_tool = SurfaceTool.new()
 	surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	surface_tool.set_smooth_group(-1) # flat shading
-	for vert in vertices:
-		surface_tool.set_color(Color.MEDIUM_PURPLE)
+
+	if FLAT_SHADED:
+		surface_tool.set_smooth_group(-1)
+
+	for vert in output["vertices"]:
 		surface_tool.add_vertex(vert)
+
 	surface_tool.generate_normals()
 	surface_tool.index()
-	var mat = StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	surface_tool.set_material(mat)
-	mesh = surface_tool.commit()
-	
-	print("terrain generated in: " + str((Time.get_ticks_msec()-time)/1000.0) + "s")
-
-## Determine vertices based on SURFACE_VALUE and add them to the vertices array (marching cubes algorithm)
-func _determine_vertices(x: int, y: int, z:int) -> void:
-	# determine triangle needed by iterating through the points around the current point via bit operations
-	# |= is bitwise OR assignement operator, << is a bitshift operation that shifts the bit x spaces left
-	var idx = 0b00000000
-	idx |= int(read_data(x, y, z) < SURFACE_VALUE) << 0
-	idx |= int(read_data(x, y, z + 1) < SURFACE_VALUE) << 1
-	idx |= int(read_data(x + 1, y, z + 1) < SURFACE_VALUE) << 2
-	idx |= int(read_data(x + 1, y, z) < SURFACE_VALUE) << 3
-	idx |= int(read_data(x, y + 1, z) < SURFACE_VALUE) << 4
-	idx |= int(read_data(x, y + 1, z + 1) < SURFACE_VALUE) << 5
-	idx |= int(read_data(x + 1, y + 1, z + 1) < SURFACE_VALUE) << 6
-	idx |= int(read_data(x + 1, y + 1, z) < SURFACE_VALUE) << 7
-	var tri = TRIANGULATIONS[idx]
-	
-	# create vertices based on edges of the determined triangulation
-	for edge_index in tri:
-		if edge_index < 0: break
-		var point_indices = EDGES[edge_index]
-		# Get 2 points connecting this edge from the POINTS array
-		var p0 = POINTS[point_indices.x]
-		var p1 = POINTS[point_indices.y]
-		# Global position of these 2 points
-		var a = Vector3(x + p0.x, y + p0.y, z + p0.z)
-		var b = Vector3(x + p1.x, y + p1.y, z + p1.z)
-		# Interpolate between these 2 points to get our mesh's vertex position
-		var val_a = read_data(a.x, a.y, a.z)
-		var val_b = read_data(b.x, b.y, b.z)
-		var t = (SURFACE_VALUE - val_a) / (val_b - val_a)
-		var vert_position = a + t * (b - a)
-		# Add our new vertex to our mesh's vertces array
-		vertices.append(vert_position)
+	call_deferred("set_mesh", surface_tool.commit())

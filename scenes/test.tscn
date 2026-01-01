@@ -20,7 +20,7 @@ glow_enabled = true
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_iyx0m"]
 
-[sub_resource type="FastNoiseLite" id="FastNoiseLite_iyx0m"]
+[sub_resource type="ArrayMesh" id="ArrayMesh_bl13t"]
 
 [node name="Node3D" type="Node3D"]
 
@@ -48,6 +48,7 @@ shape = SubResource("CapsuleShape3D_iyx0m")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.52482224, -0.46089685)
 
 [node name="VoxelTerrainMesh" type="MeshInstance3D" parent="."]
+mesh = SubResource("ArrayMesh_bl13t")
 script = ExtResource("2_bl13t")
-NOISE = SubResource("FastNoiseLite_iyx0m")
+FLAT_SHADED = true
 metadata/_custom_type_script = "uid://c8oeiosbcquwa"
