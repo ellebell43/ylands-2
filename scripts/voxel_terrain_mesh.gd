@@ -31,23 +31,18 @@ func _ready():
 	
 ## Generates a noise volume at a specfied size, then returns that nose as a Texture3D object
 func _create_data(size: Vector3i) -> Texture3D:
-	print("creating data")
 	# create and configure noise
 	var noise = FastNoiseLite.new()
 	noise.noise_type = FastNoiseLite.TYPE_PERLIN
-	print("noise created")
 	
 	# create image array from 3d noise volume
 	# invert=false, normalize=true
 	var img_array : Array[Image] = noise.get_image_3d(size.x, size.y, size.z, false, true)
-	print("image array created")
 	
 	# create texture3d from 3d image
 	# use_mipmaps=false
 	var tex3d = ImageTexture3D.new()
-	print(img_array[0].get_format())
 	tex3d.create(img_array[0].get_format(), size.x, size.y, size.z, false, img_array)
-	print("Texture3D created")
 	return tex3d
 
 func _notification(type):
@@ -87,6 +82,7 @@ func get_params():
 	return params
 
 func setup_bindings():
+	print("setting up bindings")
 	# Create the input params buffer
 	var input = get_params()
 	var input_bytes = input.to_byte_array()
@@ -96,6 +92,7 @@ func setup_bindings():
 	input_params_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
 	input_params_uniform.binding = 0
 	input_params_uniform.add_id(buffers[0])
+	print("input params buffer ready")
 	
 	# Create counter buffer
 	var counter_bytes = PackedFloat32Array([0]).to_byte_array()
@@ -105,6 +102,7 @@ func setup_bindings():
 	counter_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
 	counter_uniform.binding = 1
 	counter_uniform.add_id(buffers[1])
+	print("counter buffer ready")
 
 	# Create the triangles buffer
 	var total_cells = data.get_width() * data.get_height() * data.get_depth()
@@ -117,18 +115,23 @@ func setup_bindings():
 	vertices_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
 	vertices_uniform.binding = 2
 	vertices_uniform.add_id(buffers[2])
+	print("triangles buffer ready")
 
 	# Create the LUT buffer
 	var lut_array = PackedInt32Array()
 	for i in range(MarchingCubes.LUT.size()):
 		lut_array.append_array(MarchingCubes.LUT[i])
 	var lut_array_bytes = lut_array.to_byte_array()
+	print("LUT byte array created")
 	buffers.push_back(rd.storage_buffer_create(lut_array_bytes.size(), lut_array_bytes))
+	print("LUT byte array appended to buffer array")
 
 	var lut_uniform := RDUniform.new()
 	lut_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
 	lut_uniform.binding = 3
 	lut_uniform.add_id(buffers[3])
+	print("LUT uniform created")
+	print("LUT buffer ready")
 
 	uniform_set = rd.uniform_set_create([
 		input_params_uniform,
@@ -136,6 +139,7 @@ func setup_bindings():
 		vertices_uniform,
 		lut_uniform,
 	], shader, uniform_set_index)
+	print("uniform set created")
 
 
 func compute():
