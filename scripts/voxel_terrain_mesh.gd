@@ -10,10 +10,12 @@ var uniform_set : RID
 const uniform_set_index : int = 0
 
 var output
+var total_time : float = 0.0
 
 var data : Texture3D
-@export var SIZE : Vector3i = Vector3i(256, 256, 256)
-@export var ISO:float = 0.1
+@export var SIZE : Vector3i = Vector3i(128, 128, 128)
+## defines what value represent whether a vertex is inside or outside of the mesh. Interpolated from noise luminance with an inclusive range from 0.0 to 1.0
+@export var ISO:float = 0.75
 @export var FLAT_SHADED:bool = false
 
 @export var GENERATE: bool:
@@ -21,16 +23,21 @@ var data : Texture3D
 		var time = Time.get_ticks_msec()
 		compute()
 		var elapsed = (Time.get_ticks_msec()-time)/1000.0
+		print("===============================================")
 		print("Terrain generated in: " + str(elapsed) + "s")
+		print("===============================================")
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	data = _create_data(SIZE)
 	init_compute()
 	setup_bindings()
+	#compute()
+	print("ready in: " + str(total_time) + "s")
 	
 ## Generates a noise volume at a specfied size, then returns that nose as a Texture3D object
 func _create_data(size: Vector3i) -> Texture3D:
+	var time = Time.get_ticks_msec()
 	# create and configure noise
 	var noise = FastNoiseLite.new()
 	noise.noise_type = FastNoiseLite.TYPE_PERLIN
@@ -43,6 +50,11 @@ func _create_data(size: Vector3i) -> Texture3D:
 	# use_mipmaps=false
 	var tex3d = ImageTexture3D.new()
 	tex3d.create(img_array[0].get_format(), size.x, size.y, size.z, false, img_array)
+	
+	var elapsed = (Time.get_ticks_msec()-time)/1000.0
+	total_time += elapsed
+	print("noise texture generated in: " + str(elapsed) + "s")
+	
 	return tex3d
 
 func _notification(type):
@@ -50,11 +62,17 @@ func _notification(type):
 		release()
 
 func init_compute():
+	var time = Time.get_ticks_msec()
+
 	# Create shader and pipeline
 	var shader_file = load("res://shaders/marching_cubes.glsl")
 	var shader_spirv = shader_file.get_spirv()
 	shader = rd.shader_create_from_spirv(shader_spirv)
 	pipeline = rd.compute_pipeline_create(shader)
+	
+	var elapsed = (Time.get_ticks_msec()-time)/1000.0
+	total_time += elapsed
+	print("shader initialized in: " + str(elapsed) + "s")
 
 func release():
 	for b in buffers:
@@ -82,7 +100,8 @@ func get_params():
 	return params
 
 func setup_bindings():
-	print("setting up bindings")
+	var time = Time.get_ticks_msec()
+	
 	# Create the input params buffer
 	var input = get_params()
 	var input_bytes = input.to_byte_array()
@@ -92,7 +111,6 @@ func setup_bindings():
 	input_params_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
 	input_params_uniform.binding = 0
 	input_params_uniform.add_id(buffers[0])
-	print("input params buffer ready")
 	
 	# Create counter buffer
 	var counter_bytes = PackedFloat32Array([0]).to_byte_array()
@@ -102,8 +120,7 @@ func setup_bindings():
 	counter_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
 	counter_uniform.binding = 1
 	counter_uniform.add_id(buffers[1])
-	print("counter buffer ready")
-
+	
 	# Create the triangles buffer
 	var total_cells = data.get_width() * data.get_height() * data.get_depth()
 	var vertices = PackedColorArray()
@@ -115,34 +132,34 @@ func setup_bindings():
 	vertices_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
 	vertices_uniform.binding = 2
 	vertices_uniform.add_id(buffers[2])
-	print("triangles buffer ready")
-
+#
 	# Create the LUT buffer
 	var lut_array = PackedInt32Array()
 	for i in range(MarchingCubes.LUT.size()):
 		lut_array.append_array(MarchingCubes.LUT[i])
 	var lut_array_bytes = lut_array.to_byte_array()
-	print("LUT byte array created")
 	buffers.push_back(rd.storage_buffer_create(lut_array_bytes.size(), lut_array_bytes))
-	print("LUT byte array appended to buffer array")
 
 	var lut_uniform := RDUniform.new()
 	lut_uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER
 	lut_uniform.binding = 3
 	lut_uniform.add_id(buffers[3])
-	print("LUT uniform created")
-	print("LUT buffer ready")
-
+#
 	uniform_set = rd.uniform_set_create([
 		input_params_uniform,
 		counter_uniform,
 		vertices_uniform,
 		lut_uniform,
 	], shader, uniform_set_index)
-	print("uniform set created")
+	
+	var elapsed = (Time.get_ticks_msec()-time)/1000.0
+	total_time += elapsed
+	print("bindings set in: " + str(elapsed) + "s")
 
 
 func compute():
+	print("===============Begin Compute===================")
+	var time = Time.get_ticks_msec()
 	# Update input buffers and clear output ones
 	# This one is actually not always needed. Comment to see major speed optimization
 	var time_send: int = Time.get_ticks_usec()
@@ -157,7 +174,7 @@ func compute():
 
 	var counter_bytes = PackedFloat32Array([0]).to_byte_array()
 	rd.buffer_update(buffers[1], 0, counter_bytes.size(), counter_bytes)
-	print("Time to update buffer: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
+	print("buffer updated in: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
 
 	# Dispatch compute and uniforms
 	time_send = Time.get_ticks_usec()
@@ -166,19 +183,19 @@ func compute():
 	rd.compute_list_bind_uniform_set(compute_list, uniform_set, uniform_set_index)
 	rd.compute_list_dispatch(compute_list, data.get_width() / 8, data.get_height() / 8, data.get_depth() / 8)
 	rd.compute_list_end()
-	print("Time to dispatch uniforms: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
+	print("uniforms dispatched in: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
 
 	# Submit to GPU and wait for sync
 	time_send = Time.get_ticks_usec()
 	rd.submit()
 	rd.sync()
-	print("Time to submit and sync: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
+	print("submitted and synced in: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
 
 	# Read back the data from the buffer
 	time_send = Time.get_ticks_usec()
 	var total_triangles = rd.buffer_get_data(buffers[1]).to_int32_array()[0]
 	var output_array := rd.buffer_get_data(buffers[2]).to_float32_array()
-	print("Time to read back buffer: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
+	print("read back buffer in: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
 
 	time_send = Time.get_ticks_usec()
 	output = {
@@ -196,21 +213,20 @@ func compute():
 		for j in range(3):
 			output["normals"].push_back(normal)
 
-	print("Time iterate vertices: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
-	print("Total vertices ", output["vertices"].size())
+	print("iterated vertices in: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
+	print("total vertices: ", output["vertices"].size())
+	
+	var elapsed = (Time.get_ticks_msec()-time)/1000.0
+	total_time += elapsed
+	print("mesh computed in: " + str(elapsed) + "s")
+	print("===============================================")
 
 	create_mesh()
 
 func create_mesh():
-	var time_send: int = Time.get_ticks_usec()
-	create_mesh_with_array()
-	print("Time to create with array mesh: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
-
-	time_send = Time.get_ticks_usec()
-	create_mesh_with_surface()
-	print("Time to create with surface tool: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
-
-func create_mesh_with_array():
+	var time = Time.get_ticks_msec()
+	print("creating mesh...")
+	
 	var mesh_data = []
 	mesh_data.resize(Mesh.ARRAY_MAX)
 	mesh_data[Mesh.ARRAY_VERTEX] = output["vertices"]
@@ -219,18 +235,37 @@ func create_mesh_with_array():
 	var array_mesh = ArrayMesh.new()
 	array_mesh.clear_surfaces()
 	array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, mesh_data)
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = Color.DARK_KHAKI
+	array_mesh.surface_set_material(0, mat)
+	
 	call_deferred("set_mesh", array_mesh)
-
-func create_mesh_with_surface():
-	var surface_tool = SurfaceTool.new()
-	surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-
-	if FLAT_SHADED:
-		surface_tool.set_smooth_group(-1)
-
-	for vert in output["vertices"]:
-		surface_tool.add_vertex(vert)
-
-	surface_tool.generate_normals()
-	surface_tool.index()
-	call_deferred("set_mesh", surface_tool.commit())
+	
+	var elapsed = (Time.get_ticks_msec()-time)/1000.0
+	total_time += elapsed
+	print("mesh created in: " + str(elapsed) + "s")
+	
+	#var surface_tool = SurfaceTool.new()
+	#surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+#
+	#if FLAT_SHADED:
+		#surface_tool.set_smooth_group(-1)
+	#
+	#print("adding vertices to mesh...")
+	#
+	#for vert in output["vertices"]:
+		#surface_tool.add_vertex(vert)
+		#surface_tool.set_color(Color.BISQUE)
+	#
+	#var elapsed = (Time.get_ticks_msec()-time)/1000.0
+	#total_time += elapsed
+	#print("vertices added to mesh in: " + str(elapsed) + "s")
+#
+	#surface_tool.generate_normals()
+	#surface_tool.index()
+	#
+	#var mat = StandardMaterial3D.new()
+	#mat.vertex_color_use_as_albedo = true
+	#surface_tool.set_material(mat)
+	#
+	#mesh = surface_tool.commit()

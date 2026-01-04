@@ -6,7 +6,7 @@ class VoxelGrid:
 	var size: Vector3
 
 	func _init(init_size: Vector3):
-		self.size = size
+		self.size = init_size
 		self.data.resize(init_size.x * init_size.y * init_size.z)
 		self.data.fill(0.0)
 
@@ -22,7 +22,7 @@ class VoxelGrid:
 			var layer = _data[z]
 			for y in range(1, size.y - 1):
 				for x in range(1, size.x - 1):
-					write(x, y, z, layer.get_pixel(x, y).r)
+					write(x, y, z, layer.get_pixel(x, y).get_luminance())
 
 const LUT = [
 [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
