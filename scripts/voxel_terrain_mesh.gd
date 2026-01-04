@@ -4,7 +4,7 @@ extends MeshInstance3D
 ## Reference to player object. Used to determine loaded chunks
 @export var PLAYER : CharacterBody3D
 ## Total size of the area. Should be a multiple of CHUNK_SIZE
-@export var SIZE : Vector3i = Vector3i(1280, 128, 1280)
+@export var SIZE : Vector3i = Vector3i(1280, 128, 1280) # 1280 * 128 * 1280 takes about 2s to generate noise texture
 ## The volume a single chunk is.
 @export var CHUNK_SIZE : Vector3i = Vector3i(128, 128, 128)
 @export var RENDER_DISTANCE : int = 5
@@ -31,15 +31,16 @@ const uniform_set_index : int = 0
 var output
 
 var data : Texture3D
+var rendered_chunks : = {}
 
 var total_time : float = 0.0
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	data = create_data(SIZE)
-	init_compute()
-	setup_bindings()
-	compute()
+	#init_compute()
+	#setup_bindings()
+	#compute()
 	
 	print("===============================================")
 	print("ready in: " + str(total_time) + "s")
@@ -54,6 +55,15 @@ func _notification(type):
 			rd.free_rid(pipeline)
 			rd.free_rid(shader)
 			rd.free()
+
+func _process(delta: float) -> void:
+	# calculate player chunk position
+	var player_chunk_position : Vector3i = Vector3i(int(PLAYER.global_position.x / CHUNK_SIZE.x),int(PLAYER.global_position.y / CHUNK_SIZE.y),int(PLAYER.global_position.z / CHUNK_SIZE.z))
+	# determine chunks that should be loaded
+	# if out of range and loaded, unload chunk
+	# create load_chunk() and unload_chunk()
+	# generate mesh based on specific area
+	pass
 
 ## Generates a noise volume at the specfied SIZE, then returns that noise as a Texture3D object
 func create_data(size: Vector3i) -> Texture3D:
