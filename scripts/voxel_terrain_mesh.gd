@@ -1,42 +1,62 @@
-@tool
+#@tool
 extends MeshInstance3D
 
+## Reference to player object. Used to determine loaded chunks
+@export var PLAYER : CharacterBody3D
+## Total size of the area. Should be a multiple of CHUNK_SIZE
+@export var SIZE : Vector3i = Vector3i(1280, 128, 1280)
+## The volume a single chunk is.
+@export var CHUNK_SIZE : Vector3i = Vector3i(128, 128, 128)
+@export var RENDER_DISTANCE : int = 5
+## defines what value represent whether a vertex is inside or outside of the mesh. Interpolated from noise luminance with an inclusive range from 0.0 to 1.0
+@export var ISO : float = 0.6
+@export var FLAT_SHADED : bool = false
+#@export var GENERATE: bool:
+	#set(value):
+		#var time = Time.get_ticks_msec()
+		#compute()
+		#var elapsed = (Time.get_ticks_msec()-time)/1000.0
+		#print("===============================================")
+		#print("Terrain generated in: " + str(elapsed) + "s")
+		#print("===============================================")
 
+
+# Compute shader variables
 var rd = RenderingServer.create_local_rendering_device()
 var pipeline : RID
 var shader : RID
 var buffers: Array
 var uniform_set : RID
 const uniform_set_index : int = 0
-
 var output
-var total_time : float = 0.0
 
 var data : Texture3D
-@export var SIZE : Vector3i = Vector3i(128, 128, 128)
-## defines what value represent whether a vertex is inside or outside of the mesh. Interpolated from noise luminance with an inclusive range from 0.0 to 1.0
-@export var ISO:float = 0.75
-@export var FLAT_SHADED:bool = false
 
-@export var GENERATE: bool:
-	set(value):
-		var time = Time.get_ticks_msec()
-		compute()
-		var elapsed = (Time.get_ticks_msec()-time)/1000.0
-		print("===============================================")
-		print("Terrain generated in: " + str(elapsed) + "s")
-		print("===============================================")
+var total_time : float = 0.0
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
-	data = _create_data(SIZE)
+	data = create_data(SIZE)
 	init_compute()
 	setup_bindings()
-	#compute()
-	print("ready in: " + str(total_time) + "s")
+	compute()
 	
-## Generates a noise volume at a specfied size, then returns that nose as a Texture3D object
-func _create_data(size: Vector3i) -> Texture3D:
+	print("===============================================")
+	print("ready in: " + str(total_time) + "s")
+	print("===============================================")
+
+func _notification(type):
+	# clear buffers before being deleted
+	if type == NOTIFICATION_PREDELETE:
+		for b in buffers:
+			rd.free_rid(b)
+			buffers.clear()
+			rd.free_rid(pipeline)
+			rd.free_rid(shader)
+			rd.free()
+
+## Generates a noise volume at the specfied SIZE, then returns that noise as a Texture3D object
+func create_data(size: Vector3i) -> Texture3D:
 	var time = Time.get_ticks_msec()
 	# create and configure noise
 	var noise = FastNoiseLite.new()
@@ -57,10 +77,6 @@ func _create_data(size: Vector3i) -> Texture3D:
 	
 	return tex3d
 
-func _notification(type):
-	if type == NOTIFICATION_PREDELETE:
-		release()
-
 func init_compute():
 	var time = Time.get_ticks_msec()
 
@@ -73,15 +89,6 @@ func init_compute():
 	var elapsed = (Time.get_ticks_msec()-time)/1000.0
 	total_time += elapsed
 	print("shader initialized in: " + str(elapsed) + "s")
-
-func release():
-	for b in buffers:
-		rd.free_rid(b)
-	buffers.clear()
-	
-	rd.free_rid(pipeline)
-	rd.free_rid(shader)
-	rd.free()
 
 func get_params():
 	var voxel_grid_size := Vector3(data.get_width(), data.get_height(), data.get_width())
