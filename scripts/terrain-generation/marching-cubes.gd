@@ -16,12 +16,13 @@ class VoxelGrid:
 	func write(x: int, y: int, z: int, value: float):
 		self.data[x + self.size.x * (y + self.size.y * z)] = value
 
-	func set_data(v:Texture3D):
+	func set_data(v:Texture3D, start_position: Vector3i, _size: Vector3i):
+		var offset = start_position * _size
 		var _data = v.get_data()
-		for z in range(1, size.z - 1):
+		for z in range(1 + offset, size.z - 1 + offset):
 			var layer = _data[z]
-			for y in range(1, size.y - 1):
-				for x in range(1, size.x - 1):
+			for y in range(1 + offset, size.y - 1 + offset):
+				for x in range(1 + offset, size.x - 1 + offset):
 					write(x, y, z, layer.get_pixel(x, y).get_luminance())
 
 const LUT = [

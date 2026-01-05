@@ -1,7 +1,7 @@
 [gd_scene load_steps=8 format=3 uid="uid://cg2nh30ktqto7"]
 
 [ext_resource type="Script" uid="uid://but40cu6qnybu" path="res://scripts/player.gd" id="1_errlg"]
-[ext_resource type="Script" uid="uid://c6wksvmdxl62h" path="res://scripts/voxel_terrain_mesh.gd" id="2_bl13t"]
+[ext_resource type="Script" uid="uid://c6wksvmdxl62h" path="res://scripts/terrain-generation/voxel-terrain-chunk-managers.gd" id="2_bl13t"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_ij1v8"]
 sky_horizon_color = Color(0.66224277, 0.6717428, 0.6867428, 1)
