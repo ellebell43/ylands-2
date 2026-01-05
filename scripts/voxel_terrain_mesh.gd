@@ -261,28 +261,3 @@ func create_mesh():
 	var elapsed = (Time.get_ticks_msec()-time)/1000.0
 	total_time += elapsed
 	print("mesh created in: " + str(elapsed) + "s")
-	
-	#var surface_tool = SurfaceTool.new()
-	#surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-#
-	#if FLAT_SHADED:
-		#surface_tool.set_smooth_group(-1)
-	#
-	#print("adding vertices to mesh...")
-	#
-	#for vert in output["vertices"]:
-		#surface_tool.add_vertex(vert)
-		#surface_tool.set_color(Color.BISQUE)
-	#
-	#var elapsed = (Time.get_ticks_msec()-time)/1000.0
-	#total_time += elapsed
-	#print("vertices added to mesh in: " + str(elapsed) + "s")
-#
-	#surface_tool.generate_normals()
-	#surface_tool.index()
-	#
-	#var mat = StandardMaterial3D.new()
-	#mat.vertex_color_use_as_albedo = true
-	#surface_tool.set_material(mat)
-	#
-	#mesh = surface_tool.commit()
