@@ -15,13 +15,15 @@ var VERBOSE : bool
 
 var DATA : Texture3D
 var CHUNK_POSITION : Vector3i
-var SIZE : Vector3i
+var CHUNK_SIZE : Vector3i
+var TERRAIN_SIZE : Vector3i
 var ISO : float
 var FLAT_SHADED : bool
 
-func _init(chunk_position: Vector3i, size: Vector3i, iso: float, flat_shaded: bool, data: Texture3D, verbose: bool) -> void:
+func _init(chunk_position: Vector3i, chunk_size: Vector3i, terrain_size: Vector3i, iso: float, flat_shaded: bool, data: Texture3D, verbose: bool) -> void:
 	self.CHUNK_POSITION = chunk_position
-	self.SIZE = size
+	self.CHUNK_SIZE = chunk_size
+	self.TERRAIN_SIZE = terrain_size
 	self.ISO = iso
 	self.FLAT_SHADED = flat_shaded
 	self.DATA = data
@@ -29,11 +31,13 @@ func _init(chunk_position: Vector3i, size: Vector3i, iso: float, flat_shaded: bo
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
-	if (VERBOSE) : print("creating chunk at " + str(CHUNK_POSITION))
+	if (VERBOSE) : 
+		print("===========================================")
+		print("creating chunk at " + str(CHUNK_POSITION))
 	init_compute() # initialize compute shader file and pipelin
 	setup_bindings() # setup buffers and bindings
 	compute() # update buffers and compute the mesh
-	position = CHUNK_POSITION * SIZE # place chunk in the correct spot
+	position = CHUNK_POSITION * CHUNK_SIZE # place chunk in the correct spot
 	if (VERBOSE) : print("chunk at " + str(CHUNK_POSITION) + " ready in: " + str(total_time) + "s")
 
 func _notification(type):
@@ -62,13 +66,13 @@ func release():
 	rd.free()
 
 func get_params():
-	var voxel_grid := MarchingCubes.VoxelGrid.new(SIZE)
-	voxel_grid.set_data(DATA, CHUNK_POSITION, SIZE)
+	var voxel_grid := MarchingCubes.VoxelGrid.new(CHUNK_SIZE, CHUNK_POSITION, TERRAIN_SIZE)
+	voxel_grid.set_data(DATA)
 	
 	var params = PackedFloat32Array()
-	params.append(SIZE.x)
-	params.append(SIZE.y)
-	params.append(SIZE.z)
+	params.append(CHUNK_SIZE.x)
+	params.append(CHUNK_SIZE.y)
+	params.append(CHUNK_SIZE.z)
 	params.append(ISO)
 	params.append(int(FLAT_SHADED))
 	
@@ -99,7 +103,7 @@ func setup_bindings():
 	counter_uniform.add_id(buffers[1])
 	
 	# Create the triangles buffer
-	var total_cells = SIZE.x * SIZE.y * SIZE.z
+	var total_cells = CHUNK_SIZE.x * CHUNK_SIZE.y * CHUNK_SIZE.z
 	var vertices = PackedColorArray()
 	vertices.resize(total_cells * 5 * (3 + 1)) # 5 triangles max per cell, 3 vertices and 1 normal per triangle
 	var vertices_bytes = vertices.to_byte_array()
@@ -142,21 +146,20 @@ func compute():
 	var input_bytes = input.to_byte_array()
 	rd.buffer_update(buffers[0], 0, input_bytes.size(), input_bytes)
 
-	var total_cells = SIZE.x * SIZE.y * SIZE.z
+	var total_cells = CHUNK_SIZE.x * CHUNK_SIZE.y * CHUNK_SIZE.z
 	var vertices = PackedColorArray()
 	vertices.resize(total_cells * 5 * (3 + 1)) # 5 triangles max per cell, 3 vertices and 1 normal per triangle
 	var vertices_bytes = vertices.to_byte_array()
 
 	var counter_bytes = PackedFloat32Array([0]).to_byte_array()
 	rd.buffer_update(buffers[1], 0, counter_bytes.size(), counter_bytes)
-	print("buffer updated in: " + Utils.parse_time(Time.get_ticks_usec() - time_send))
 
 	# Dispatch compute and uniforms
 	time_send = Time.get_ticks_usec()
 	var compute_list := rd.compute_list_begin()
 	rd.compute_list_bind_compute_pipeline(compute_list, pipeline)
 	rd.compute_list_bind_uniform_set(compute_list, uniform_set, uniform_set_index)
-	rd.compute_list_dispatch(compute_list, SIZE.x / 8, SIZE.y / 8, SIZE.z / 8)
+	rd.compute_list_dispatch(compute_list, CHUNK_SIZE.x / 8, CHUNK_SIZE.y / 8, CHUNK_SIZE.z / 8)
 	rd.compute_list_end()
 
 	# Submit to GPU and wait for sync

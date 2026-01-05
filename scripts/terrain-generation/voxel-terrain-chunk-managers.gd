@@ -34,12 +34,15 @@ func _process(_delta: float) -> void:
 	var player_chunk_position : Vector3i = Vector3i(int(PLAYER.global_position.x / CHUNK_SIZE.x),int(PLAYER.global_position.y / CHUNK_SIZE.y),int(PLAYER.global_position.z / CHUNK_SIZE.z))
 	# Iterate through chunks within range, and load chunks that haven't been loaded yet
 	for x in range(player_chunk_position.x - RENDER_DISTANCE, player_chunk_position.x + RENDER_DISTANCE):
-		for y in range(player_chunk_position.y - RENDER_DISTANCE, player_chunk_position.y + RENDER_DISTANCE):
-			for z in range(player_chunk_position.z - RENDER_DISTANCE, player_chunk_position.z + RENDER_DISTANCE):
-				var chunk_key = str(x) + "," + str(y) + "," + str(z)
-				var chunk_position : Vector3i = Vector3i(x, y, z)
-				if not rendered_chunks.has(chunk_key):
-					load_chunk(chunk_position)
+		if not (x < 0 or x > SIZE.x / CHUNK_SIZE.x): # ensure x value is in bounds
+			for y in range(player_chunk_position.y - RENDER_DISTANCE, player_chunk_position.y + RENDER_DISTANCE):
+				if not (y < 0 or y > SIZE.y / CHUNK_SIZE.y): # ensure y value is in bounds
+					for z in range(player_chunk_position.z - RENDER_DISTANCE, player_chunk_position.z + RENDER_DISTANCE):
+						if not (z < 0 or z > SIZE.z / CHUNK_SIZE.z): # ensure y value is in bounds
+							var chunk_key = str(x) + "," + str(y) + "," + str(z)
+							var chunk_position : Vector3i = Vector3i(x, y, z)
+							if not rendered_chunks.has(chunk_key):
+								load_chunk(chunk_position)
 	
 	# Iterate through rendered chunks and confirm all are in range, otherwise, unload
 	for key in rendered_chunks:
@@ -67,14 +70,17 @@ func create_data(size: Vector3i) -> Texture3D:
 	
 	var elapsed: float = (Time.get_ticks_msec() - time)/1000.0
 	total_time += elapsed
-	print("noise texture generated in: " + str(elapsed) + "s")
 	
 	return tex3d
 
 func load_chunk(chunk_position: Vector3i):
-	var new_chunk :VoxelTerrainChunk = VoxelTerrainChunk.new(chunk_position, CHUNK_SIZE, ISO, FLAT_SHADED, data, VERBOSE)
+	var new_chunk :VoxelTerrainChunk = VoxelTerrainChunk.new(chunk_position, CHUNK_SIZE, SIZE, ISO, FLAT_SHADED, data, VERBOSE)
 	add_child(new_chunk)
 	rendered_chunks[str(chunk_position)] = new_chunk
 	
 func unload_chunk(chunk_position: Vector3i):
-	if (VERBOSE) : print("chunk unloaded at: " + str(chunk_position))
+	if rendered_chunks.has(str(chunk_position)):
+		var chunk : VoxelTerrainChunk = rendered_chunks[str(chunk_position)]
+		chunk.queue_free()
+		rendered_chunks.erase(str(chunk_position))
+		if (VERBOSE) : print("chunk unloaded at: " + str(chunk_position))

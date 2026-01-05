@@ -2,27 +2,39 @@ class_name MarchingCubes
 extends Node
 
 class VoxelGrid:
+	## An array of values ranging from 0.0 to 1.0 interpolated from a noise texture
 	var data: PackedFloat32Array
-	var size: Vector3
+	## The size of the voxel grid area
+	var chunk_size: Vector3i
+	## The position relative to chunk_size
+	var chunk_position: Vector3i
+	## size of the entire mesh if all chunks were put together
+	var full_terrain_size : Vector3i
 
-	func _init(init_size: Vector3):
-		self.size = init_size
-		self.data.resize(init_size.x * init_size.y * init_size.z)
+	func _init(_chunk_size: Vector3, _chunk_position: Vector3i, _full_terrain_size: Vector3i):
+		self.chunk_size = _chunk_size
+		self.data.resize(_chunk_size.x * _chunk_size.y * _chunk_size.z)
 		self.data.fill(0.0)
+		self.chunk_position = _chunk_position
+		self.full_terrain_size = _full_terrain_size
 
 	func read(x: int, y: int, z: int):
-		return self.data[x + self.size.x * (y + self.size.y * z)]
+		return data[x + chunk_size.x * (y + chunk_size.y * z)]
 
 	func write(x: int, y: int, z: int, value: float):
-		self.data[x + self.size.x * (y + self.size.y * z)] = value
+		data[x + chunk_size.x * (y + chunk_size.y * z)] = value
 
-	func set_data(v:Texture3D, start_position: Vector3i, _size: Vector3i):
-		var offset = start_position * _size
-		var _data = v.get_data()
-		for z in range(1 + offset, size.z - 1 + offset):
-			var layer = _data[z]
-			for y in range(1 + offset, size.y - 1 + offset):
-				for x in range(1 + offset, size.x - 1 + offset):
+# TODO: determining data size is incorrect. Trying to write() on line 27 is out of bounds
+	func set_data(v:Texture3D):
+		var offset_x : int = chunk_position.x * (full_terrain_size.x / chunk_size.x) # scale value of the size of the chunk vs the size of the full terrain
+		var offset_y : int = chunk_position.y * (full_terrain_size.y / chunk_size.y) # scale value of the size of the chunk vs the size of the full terrain
+		var offset_z : int = chunk_position.z * (full_terrain_size.z / chunk_size.z) # scale value of the size of the chunk vs the size of the full terrain
+		var noise_data = v.get_data() # Texture3D image array
+		print("noise layers: " + str(noise_data.size()))
+		for z in range(1 * offset_z, chunk_size.z - (1 * offset_z)):
+			var layer = noise_data[z]
+			for y in range(1 * offset_y, chunk_size.y - (1 * offset_y)):
+				for x in range(1 * offset_x, chunk_size.x - (1 * offset_x)):
 					write(x, y, z, layer.get_pixel(x, y).get_luminance())
 
 const LUT = [
