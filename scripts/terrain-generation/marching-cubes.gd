@@ -25,19 +25,16 @@ class VoxelGrid:
 		data[x + chunk_size.x * (y + chunk_size.y * z)] = value
 
 	func set_data(v:NoiseTexture3D):
-		var scale_value = full_terrain_size.x / chunk_size.x
-		var offset_x : int = chunk_position.x * scale_value # scale value of the size of the chunk vs the size of the full terrain
-		var offset_y : int = chunk_position.y * scale_value # scale value of the size of the chunk vs the size of the full terrain
-		var offset_z : int = chunk_position.z * scale_value # scale value of the size of the chunk vs the size of the full terrain
+		var offset_x : float = chunk_position.x * chunk_size.x
+		var offset_y : float = chunk_position.y * chunk_size.y
+		var offset_z : float = chunk_position.z * chunk_size.z
 		for z in range(0, chunk_size.z):
 			var _z = offset_z + z
-			#var layer = noise_data[_z]
 			for y in range(0, chunk_size.y):
 				var _y = offset_y + y
 				for x in range(0, chunk_size.x):
 					var _x = offset_x + x
 					write(x, y, z, v.noise.get_noise_3d(_x, _y, _z))
-					#write(x, y, z, layer.get_pixel(_x, _y).get_luminance())
 
 const LUT = [
 [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],

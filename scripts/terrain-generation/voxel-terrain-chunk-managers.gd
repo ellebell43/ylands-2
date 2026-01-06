@@ -7,7 +7,7 @@ class_name VoxelTerrainChunkManager
 ## Total size of the area. Should be a multiple of CHUNK_SIZE
 @export var SIZE : Vector3i = Vector3i(1280, 128, 1280) # 1280 * 128 * 1280 takes about 2s to generate noise texture
 ## The volume a single chunk is.
-@export var CHUNK_SIZE : Vector3i = Vector3i(128, 128, 128)
+@export var CHUNK_SIZE : Vector3i = Vector3i(32, 32, 32)
 @export var RENDER_DISTANCE : int = 5
 ## defines what value represent whether a vertex is inside or outside of the mesh. Interpolated from noise luminance with an inclusive range from -1.0 to 1.0
 @export var ISO : float = 0.1
