@@ -16,6 +16,7 @@ class_name VoxelTerrainChunkManager
 
 var data : NoiseTexture3D
 var rendered_chunks : = {}
+var mesh_update_needed : bool = true
 
 var total_time : float = 0.1
 
@@ -62,6 +63,8 @@ func _process(_delta: float) -> void:
 		if (relative_chunk_position.z > RENDER_DISTANCE) : is_out_of_range = true
 		
 		if is_out_of_range : unload_chunk(chunk_position)
+	
+	if mesh_update_needed : update_mesh()
 
 ## Generates a noise volume at the specfied SIZE, then returns that noise as a Texture3D object
 func create_data() -> void:
@@ -87,10 +90,41 @@ func load_chunk(chunk_position: Vector3i):
 	var new_chunk :VoxelTerrainChunk = VoxelTerrainChunk.new(chunk_position, CHUNK_SIZE, SIZE, ISO, FLAT_SHADED, data, VERBOSE)
 	add_child(new_chunk)
 	rendered_chunks[str(chunk_position)] = new_chunk
+	mesh_update_needed = true
 	
 func unload_chunk(chunk_position: Vector3i):
 	if rendered_chunks.has(str(chunk_position)):
 		var chunk : VoxelTerrainChunk = rendered_chunks[str(chunk_position)]
 		chunk.queue_free()
 		rendered_chunks.erase(str(chunk_position))
+		mesh_update_needed = true
 		if (VERBOSE) : print("chunk unloaded at: " + str(chunk_position))
+
+func update_mesh() -> void:
+	var time: int = Time.get_ticks_msec()
+	var mesh_data = []
+	mesh_data.resize(Mesh.ARRAY_MAX)
+	mesh_data[Mesh.ARRAY_VERTEX] = PackedVector3Array()
+	mesh_data[Mesh.ARRAY_NORMAL] = PackedVector3Array()
+	
+	for child in get_children():
+		if child is VoxelTerrainChunk:
+			for vert in child.output["vertices"]:
+				mesh_data[Mesh.ARRAY_VERTEX].append(vert + (Vector3(child.CHUNK_POSITION) * Vector3(CHUNK_SIZE)))
+			for normal in child.output["normals"]:
+				mesh_data[Mesh.ARRAY_NORMAL].append(normal)
+	
+	var array_mesh = ArrayMesh.new()
+	array_mesh.clear_surfaces()
+	array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, mesh_data)
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = Color.DARK_KHAKI
+	array_mesh.surface_set_material(0, mat)
+	array_mesh.resource_local_to_scene = true
+	
+	self.mesh = array_mesh
+	mesh_update_needed = false
+	
+	var elapsed: float = (Time.get_ticks_msec() - time)/1000.0
+	total_time += elapsed
+	if (VERBOSE) : print("terrain mesh created in " + str(elapsed))

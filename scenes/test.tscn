@@ -48,3 +48,4 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.52482224, -0.46089685)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.22324371, 0.207695, 0.023040771)
 script = ExtResource("2_bl13t")
 PLAYER = NodePath("../Player")
+VERBOSE = true

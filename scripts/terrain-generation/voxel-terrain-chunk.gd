@@ -34,9 +34,11 @@ func _ready():
 	if (VERBOSE) : 
 		print("===========================================")
 		print("creating chunk at " + str(CHUNK_POSITION))
+	visible = false
 	init_compute() # initialize compute shader file and pipelin
 	setup_bindings() # setup buffers and bindings
 	compute() # update buffers and compute the mesh
+	#create_mesh() # create mesh from computed data
 	global_position = CHUNK_POSITION * CHUNK_SIZE # place chunk in the correct spot
 	if (VERBOSE) : print("chunk at " + str(CHUNK_POSITION) + " ready in: " + str(total_time) + "s")
 
@@ -186,10 +188,10 @@ func compute():
 
 	if (VERBOSE) : print("total vertices at " + str(CHUNK_POSITION) + " : ", output["vertices"].size())
 	
+	release()
+	
 	var elapsed = (Time.get_ticks_msec()-time)/1000.0
 	total_time += elapsed
-
-	create_mesh()
 
 func create_mesh():
 	var time = Time.get_ticks_msec()
@@ -209,7 +211,6 @@ func create_mesh():
 		array_mesh.resource_local_to_scene = true
 		
 		self.mesh = array_mesh
-		release()
 	
 	var elapsed = (Time.get_ticks_msec()-time)/1000.0
 	total_time += elapsed
