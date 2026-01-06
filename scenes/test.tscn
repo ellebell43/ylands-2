@@ -32,7 +32,6 @@ shadow_enabled = true
 environment = SubResource("Environment_bl13t")
 
 [node name="Player" type="CharacterBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2601266, 0)
 collision_layer = 2
 script = ExtResource("1_errlg")
 
@@ -49,4 +48,5 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.52482224, -0.46089685)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.22324371, 0.207695, 0.023040771)
 script = ExtResource("2_bl13t")
 PLAYER = NodePath("../Player")
+CHUNK_SIZE = Vector3i(32, 32, 32)
 FLAT_SHADED = true

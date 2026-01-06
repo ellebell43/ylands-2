@@ -205,8 +205,9 @@ func create_mesh():
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color.DARK_KHAKI
 	array_mesh.surface_set_material(0, mat)
+	array_mesh.resource_local_to_scene = true
 	
-	call_deferred("set_mesh", array_mesh)
+	mesh = array_mesh
 	release()
 	
 	var elapsed = (Time.get_ticks_msec()-time)/1000.0
