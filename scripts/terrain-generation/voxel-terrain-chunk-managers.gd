@@ -46,8 +46,10 @@ func _process(_delta: float) -> void:
 	
 	# Iterate through rendered chunks and confirm all are in range, otherwise, unload
 	for key in rendered_chunks:
-		var coords : Array[int] = key.split(",")
-		var chunk_position : Vector3i = Vector3i(coords[0], coords[1], coords[2])
+		var new_string : String = key.erase(0,1) # remove opening parenthesis from string
+		new_string = new_string.erase(new_string.length() - 1, 1) # remove closing parenthesis
+		var coords : Array[String] = new_string.split(", ") # split string into 3 values
+		var chunk_position : Vector3i = Vector3i(int(coords[0]), int(coords[1]), int(coords[2])) # package values into Vector3i
 		var is_out_of_range = abs(chunk_position - player_chunk_position) < RENDER_DISTANCE
 		if is_out_of_range:
 			unload_chunk(chunk_position)

@@ -24,13 +24,11 @@ class VoxelGrid:
 	func write(x: int, y: int, z: int, value: float):
 		data[x + chunk_size.x * (y + chunk_size.y * z)] = value
 
-# TODO: determining data size is incorrect. Trying to write() on line 27 is out of bounds
 	func set_data(v:Texture3D):
 		var offset_x : int = chunk_position.x * (full_terrain_size.x / chunk_size.x) # scale value of the size of the chunk vs the size of the full terrain
 		var offset_y : int = chunk_position.y * (full_terrain_size.y / chunk_size.y) # scale value of the size of the chunk vs the size of the full terrain
 		var offset_z : int = chunk_position.z * (full_terrain_size.z / chunk_size.z) # scale value of the size of the chunk vs the size of the full terrain
 		var noise_data = v.get_data() # Texture3D image array
-		print("noise layers: " + str(noise_data.size()))
 		for z in range(1 * offset_z, chunk_size.z - (1 * offset_z)):
 			var layer = noise_data[z]
 			for y in range(1 * offset_y, chunk_size.y - (1 * offset_y)):

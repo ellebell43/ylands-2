@@ -211,6 +211,7 @@ func create_mesh():
 	array_mesh.surface_set_material(0, mat)
 	
 	call_deferred("set_mesh", array_mesh)
+	release()
 	
 	var elapsed = (Time.get_ticks_msec()-time)/1000.0
 	total_time += elapsed
