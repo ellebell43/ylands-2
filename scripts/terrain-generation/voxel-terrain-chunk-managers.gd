@@ -32,25 +32,37 @@ func _ready():
 func _process(_delta: float) -> void:
 	# calculate player chunk position
 	var player_chunk_position : Vector3i = Vector3i(int(PLAYER.global_position.x / CHUNK_SIZE.x),int(PLAYER.global_position.y / CHUNK_SIZE.y),int(PLAYER.global_position.z / CHUNK_SIZE.z))
-	# Iterate through chunks within range, and load chunks that haven't been loaded yet
+	# Iterate through chunks within range, and load chunks that haven't been loaded yet if it's in the range of the total SIZE
 	for x in range(player_chunk_position.x - RENDER_DISTANCE, player_chunk_position.x + RENDER_DISTANCE):
 		for y in range(player_chunk_position.y - RENDER_DISTANCE, player_chunk_position.y + RENDER_DISTANCE):
 			for z in range(player_chunk_position.z - RENDER_DISTANCE, player_chunk_position.z + RENDER_DISTANCE):
-				var chunk_key = str(x) + "," + str(y) + "," + str(z)
+				# determine chunk position and position relative to the player
 				var chunk_position : Vector3i = Vector3i(x, y, z)
-				var is_out_of_range = abs(chunk_position - player_chunk_position) < RENDER_DISTANCE
-				if not rendered_chunks.has(chunk_key) and not is_out_of_range:
-					load_chunk(chunk_position)
+				var relative_chunk_position = abs(chunk_position - player_chunk_position)
+				
+				# determine if the chunk is out of range
+				var is_out_of_range = false
+				if (relative_chunk_position.x > RENDER_DISTANCE or chunk_position.x < 0 or chunk_position.x > SIZE.x / CHUNK_SIZE.x) : is_out_of_range = true
+				if (relative_chunk_position.y > RENDER_DISTANCE or chunk_position.y < 0 or chunk_position.y > SIZE.y / CHUNK_SIZE.y) : is_out_of_range = true
+				if (relative_chunk_position.z > RENDER_DISTANCE or chunk_position.z < 0 or chunk_position.z > SIZE.z / CHUNK_SIZE.z) : is_out_of_range = true
+				
+				# if not rendered and in range, load the chunk.
+				if not rendered_chunks.has(str(chunk_position)) and not is_out_of_range : load_chunk(chunk_position)
 	
 	# Iterate through rendered chunks and confirm all are in range, otherwise, unload
 	for key in rendered_chunks:
 		var new_string : String = key.erase(0,1) # remove opening parenthesis from string
 		new_string = new_string.erase(new_string.length() - 1, 1) # remove closing parenthesis
-		var coords : Array[String] = new_string.split(", ") # split string into 3 values
+		var coords : PackedStringArray = new_string.split(", ") # split string into 3 values
 		var chunk_position : Vector3i = Vector3i(int(coords[0]), int(coords[1]), int(coords[2])) # package values into Vector3i
-		var is_out_of_range = abs(chunk_position - player_chunk_position) < RENDER_DISTANCE
-		if is_out_of_range:
-			unload_chunk(chunk_position)
+		var relative_chunk_position = abs(chunk_position - player_chunk_position)
+		
+		var is_out_of_range = false
+		if (relative_chunk_position.x > RENDER_DISTANCE) : is_out_of_range = true
+		if (relative_chunk_position.y > RENDER_DISTANCE) : is_out_of_range = true
+		if (relative_chunk_position.z > RENDER_DISTANCE) : is_out_of_range = true
+		
+		if is_out_of_range : unload_chunk(chunk_position)
 
 ## Generates a noise volume at the specfied SIZE, then returns that noise as a Texture3D object
 func create_data(size: Vector3i) -> Texture3D:

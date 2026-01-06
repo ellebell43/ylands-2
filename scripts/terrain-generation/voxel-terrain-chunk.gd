@@ -40,10 +40,6 @@ func _ready():
 	position = CHUNK_POSITION * CHUNK_SIZE # place chunk in the correct spot
 	if (VERBOSE) : print("chunk at " + str(CHUNK_POSITION) + " ready in: " + str(total_time) + "s")
 
-func _notification(type):
-	if type == NOTIFICATION_PREDELETE:
-		release()
-
 func init_compute():
 	var time = Time.get_ticks_msec()
 
