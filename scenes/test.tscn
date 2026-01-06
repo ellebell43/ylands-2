@@ -49,4 +49,3 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.22324371, 0.207695, 0.02304
 script = ExtResource("2_bl13t")
 PLAYER = NodePath("../Player")
 CHUNK_SIZE = Vector3i(32, 32, 32)
-FLAT_SHADED = true

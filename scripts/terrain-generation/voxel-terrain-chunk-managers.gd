@@ -9,20 +9,19 @@ class_name VoxelTerrainChunkManager
 ## The volume a single chunk is.
 @export var CHUNK_SIZE : Vector3i = Vector3i(128, 128, 128)
 @export var RENDER_DISTANCE : int = 5
-## defines what value represent whether a vertex is inside or outside of the mesh. Interpolated from noise luminance with an inclusive range from 0.0 to 1.0
-@export var ISO : float = 0.6
+## defines what value represent whether a vertex is inside or outside of the mesh. Interpolated from noise luminance with an inclusive range from -1.0 to 1.0
+@export var ISO : float = 0.1
 @export var FLAT_SHADED : bool = false
-@export var VERBOSE : bool = true
+@export var VERBOSE : bool = false
 
-var data : Texture3D
+var data : NoiseTexture3D
 var rendered_chunks : = {}
 
-var total_time : float = 0.0
+var total_time : float = 0.1
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
-	data = create_data(SIZE)
-	
+	create_data() # create noise data to generate terrain from
 	if (VERBOSE):
 		print("===============================================")
 		print("chunk manager ready in: " + str(total_time) + "s")
@@ -65,25 +64,24 @@ func _process(_delta: float) -> void:
 		if is_out_of_range : unload_chunk(chunk_position)
 
 ## Generates a noise volume at the specfied SIZE, then returns that noise as a Texture3D object
-func create_data(size: Vector3i) -> Texture3D:
+func create_data() -> void:
 	var time: int = Time.get_ticks_msec()
 	# create and configure noise
 	var noise : FastNoiseLite = FastNoiseLite.new()
 	noise.noise_type = FastNoiseLite.TYPE_PERLIN
 	
-	# create image array from 3d noise volume
-	# invert=false, normalize=true
-	var img_array : Array[Image] = noise.get_image_3d(size.x, size.y, size.z, false, true)
-	
-	# create texture3d from 3d image
-	# use_mipmaps=false
-	var tex3d = ImageTexture3D.new()
-	tex3d.create(img_array[0].get_format(), size.x, size.y, size.z, false, img_array)
+	var tex3d : NoiseTexture3D = NoiseTexture3D.new()
+	tex3d.noise = noise
+	tex3d.width = SIZE.x
+	tex3d.height = SIZE.y
+	tex3d.depth = SIZE.z
+	tex3d.seamless = true
+	tex3d.normalize = true
 	
 	var elapsed: float = (Time.get_ticks_msec() - time)/1000.0
 	total_time += elapsed
 	
-	return tex3d
+	data = tex3d
 
 func load_chunk(chunk_position: Vector3i):
 	var new_chunk :VoxelTerrainChunk = VoxelTerrainChunk.new(chunk_position, CHUNK_SIZE, SIZE, ISO, FLAT_SHADED, data, VERBOSE)

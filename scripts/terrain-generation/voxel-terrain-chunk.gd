@@ -13,7 +13,7 @@ var output
 var total_time : float = 0.0
 var VERBOSE : bool
 
-var DATA : Texture3D
+var DATA : NoiseTexture3D
 var CHUNK_POSITION : Vector3i
 var CHUNK_SIZE : Vector3i
 var TERRAIN_SIZE : Vector3i
@@ -37,7 +37,7 @@ func _ready():
 	init_compute() # initialize compute shader file and pipelin
 	setup_bindings() # setup buffers and bindings
 	compute() # update buffers and compute the mesh
-	position = CHUNK_POSITION * CHUNK_SIZE # place chunk in the correct spot
+	global_position = CHUNK_POSITION * CHUNK_SIZE # place chunk in the correct spot
 	if (VERBOSE) : print("chunk at " + str(CHUNK_POSITION) + " ready in: " + str(total_time) + "s")
 
 func init_compute():
@@ -184,7 +184,7 @@ func compute():
 		for j in range(3):
 			output["normals"].push_back(normal)
 
-	print("total vertices at " + str(CHUNK_POSITION) + " : ", output["vertices"].size())
+	if (VERBOSE) : print("total vertices at " + str(CHUNK_POSITION) + " : ", output["vertices"].size())
 	
 	var elapsed = (Time.get_ticks_msec()-time)/1000.0
 	total_time += elapsed
@@ -194,21 +194,22 @@ func compute():
 func create_mesh():
 	var time = Time.get_ticks_msec()
 	
-	var mesh_data = []
-	mesh_data.resize(Mesh.ARRAY_MAX)
-	mesh_data[Mesh.ARRAY_VERTEX] = output["vertices"]
-	mesh_data[Mesh.ARRAY_NORMAL] = output["normals"]
+	if output["vertices"].size() :
+		var mesh_data = []
+		mesh_data.resize(Mesh.ARRAY_MAX)
+		mesh_data[Mesh.ARRAY_VERTEX] = output["vertices"]
+		mesh_data[Mesh.ARRAY_NORMAL] = output["normals"]
 
-	var array_mesh = ArrayMesh.new()
-	array_mesh.clear_surfaces()
-	array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, mesh_data)
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = Color.DARK_KHAKI
-	array_mesh.surface_set_material(0, mat)
-	array_mesh.resource_local_to_scene = true
-	
-	mesh = array_mesh
-	release()
+		var array_mesh = ArrayMesh.new()
+		array_mesh.clear_surfaces()
+		array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, mesh_data)
+		var mat = StandardMaterial3D.new()
+		mat.albedo_color = Color.DARK_KHAKI
+		array_mesh.surface_set_material(0, mat)
+		array_mesh.resource_local_to_scene = true
+		
+		self.mesh = array_mesh
+		release()
 	
 	var elapsed = (Time.get_ticks_msec()-time)/1000.0
 	total_time += elapsed
