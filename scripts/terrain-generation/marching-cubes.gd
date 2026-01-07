@@ -11,9 +11,9 @@ class VoxelGrid:
 	## size of the entire mesh if all chunks were put together
 	var full_terrain_size : Vector3i
 
-	func _init(_chunk_size: Vector3, _chunk_position: Vector3i, _full_terrain_size: Vector3i):
+	func _init(_chunk_size: Vector3i, _chunk_position: Vector3i, _full_terrain_size: Vector3i):
 		self.chunk_size = _chunk_size
-		self.data.resize(_chunk_size.x * _chunk_size.y * _chunk_size.z)
+		self.data.resize((_chunk_size.x + 1) * (_chunk_size.y + 1) * (_chunk_size.z + 1))
 		self.data.fill(0.0)
 		self.chunk_position = _chunk_position
 		self.full_terrain_size = _full_terrain_size
@@ -28,12 +28,12 @@ class VoxelGrid:
 		var offset_x : float = chunk_position.x * chunk_size.x
 		var offset_y : float = chunk_position.y * chunk_size.y
 		var offset_z : float = chunk_position.z * chunk_size.z
-		for z in range(0, chunk_size.z):
-			var _z = offset_z + z
-			for y in range(0, chunk_size.y):
-				var _y = offset_y + y
-				for x in range(0, chunk_size.x):
-					var _x = offset_x + x
+		for x in range(0, chunk_size.x + 1):
+			var _x = (offset_x + x)
+			for y in range(0, chunk_size.y + 1):
+				var _y = (offset_y + y)
+				for z in range(0, chunk_size.z + 1):
+					var _z = (offset_z + z)
 					write(x, y, z, v.noise.get_noise_3d(_x, _y, _z))
 
 const LUT = [
