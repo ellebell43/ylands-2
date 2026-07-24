@@ -33,7 +33,8 @@ func _init(_seed: int, size: float):
 	terrain_noise.domain_warp_amplitude = 2.5
 	terrain_noise.seed = _seed
 	center = Vector3(size / 2, size / 2, size / 2)
-	floor_distance = size / 2 / 2
+	## Distance from the center of the volume to the floor. size / 2 = floor at the very edge of the volume
+	floor_distance = (size / 2) - 2000
 
 ## Get a noise sample biased towards a world shape at a specific Vec3 of the noise volume
 func sample(x: float, y: float, z: float) -> float:
