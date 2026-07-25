@@ -9,6 +9,8 @@ var chunk_count: int
 var noise: WorldNoise
 ## Reference to the player node
 var player: Player
+var player_pos: Vector3
+var is_current_world := false
 
 # ========== CHUNK MANAGEMENT VARIABLES ==========
 
@@ -40,14 +42,21 @@ var active_chunk_set: Dictionary[Array, Chunk] = {}
 var retiring_chunk_set: Dictionary[Array, Chunk] = {}
 var ready_to_die_chunk_set: Dictionary[Array, Chunk] = {}
 
+# ========== TIMING VARIABLES ==========
+
+var process_time := 0
+var total_chunk_gen_time := 0
+var total_chunks := 0
+
 # ========== NODE INITIALIZATION ==========
 
-func _init(_player: Player, _seed: int, _max_octree_depth: int) -> void:
+func _init(_player: Player, _seed: int, _max_octree_depth: int, _is_current_world := false) -> void:
 	self.max_octree_depth = _max_octree_depth
 	self.chunk_count = int(pow(2, max_octree_depth))
 	self.noise = WorldNoise.new(_seed, chunk_size * pow(2, max_octree_depth))
 	self.player = _player
 	self.root_node_size = int(chunk_size * pow(2, max_octree_depth))
+	self.is_current_world = _is_current_world
 
 func _ready() -> void:
 	# if global Util.debug is true, print total chunk count volume
@@ -56,6 +65,7 @@ func _ready() -> void:
 # ========== PROCESS FUNCTION ==========
 
 func _process(_delta: float) -> void:
+	var start_time := Time.get_ticks_usec()
 	# If a player position hasn't been recorded yet, iterate through the octree for the first time, compare leaf sets (loads new_chunk_set into current_chunk_set to load chunks in), and record player position
 	if not first_iteration_complete:
 		_octree_iterate()
@@ -67,15 +77,16 @@ func _process(_delta: float) -> void:
 		prev_player_pos = player.position
 		first_iteration_complete = true
 	# When the player passes the movement threshold, store the new position, clear the new leaf set, re-iterate through the octree, and compare leaf sets to update chunks
-	if player.position.distance_to(prev_player_pos) >= player_movement_threshold:
+	if player.position.distance_to(prev_player_pos) >= player_movement_threshold and is_current_world:
 		prev_player_pos = player.position
 		new_chunk_set.clear()
-		_octree_iterate()
+		if is_current_world: _octree_iterate()
+		else: _octree_iterate(max_octree_depth - 2)
 		_find_masks()
 		_load_new_chunks()
 
 	
-	if first_iteration_complete:
+	if first_iteration_complete and WorldNoise and is_current_world:
 		_mark_retiring_chunks()
 		_check_retiring_chunks()
 		_kill_dead_chunks()
@@ -125,27 +136,35 @@ func _process(_delta: float) -> void:
 			if tasks_emitted < total_first_tasks and player.spawn_world == self.get_parent():
 				tasks_emitted += 1
 				Utils.emit_signal("chunk_task_completed", tasks_emitted)
+	
+	process_time = Time.get_ticks_usec() - start_time
 
 # ========== PRIVATE FUNCTIONS ==========
 
 ## Iterate through the octree, starting at the root node, and determine what chunks need to be split until depth reaches max_octree_depth. Add chunks to new_chunk_set to be compared against current_chunk_set later
-func _octree_iterate(depth: int = 0, parent_pos: Vector3i = Vector3.ZERO) -> void:
+func _octree_iterate(depth: int = 0, parent_pos: Vector3 = Vector3.ZERO) -> void:
+	player_pos = to_local(player.global_position)
+	var player_pos_clamped: Vector3
+	var cell_pos: Vector3
 	var cell_size := int(root_node_size / pow(2, depth))
 	# iterate through cells at this octree depth and either continue iterating, or append to new leaf set depending on distance to player
 	# Each cell can be split into 8 cells, then each of those can be split into finer 8 cells depending on distance to player and distance_factor
-	for _x in 2:
-		for _y in 2:
-			for _z in 2:
-				# Get distance to edge of cell and use that to determine if the cell should render or split
-				var cell_pos = Vector3(parent_pos) + Vector3(cell_size * _x, cell_size * _y, cell_size * _z)
-				var player_pos := to_local(player.global_position)
-				var player_pos_clamped := player_pos.clamp(cell_pos, Vector3(cell_size, cell_size, cell_size) + cell_pos)
-				if player_pos_clamped.distance_to(player_pos) < cell_size * distance_factor and depth < max_octree_depth:
-					_octree_iterate(depth + 1, cell_pos)
-				else:
-					@warning_ignore("integer_division")
-					var lod_step := cell_size / chunk_size
-					new_chunk_set.set([Vector3i(cell_pos), lod_step], 0)
+	if is_current_world:
+		for _x in 2:
+			for _y in 2:
+				for _z in 2:
+					# Get distance to edge of cell and use that to determine if the cell should render or split
+					cell_pos = parent_pos + Vector3(cell_size * _x, cell_size * _y, cell_size * _z)
+					player_pos = to_local(player.global_position)
+					player_pos_clamped = player_pos.clamp(cell_pos, Vector3(cell_size, cell_size, cell_size) + cell_pos)
+					if player_pos_clamped.distance_to(player_pos) < cell_size * distance_factor and depth < max_octree_depth:
+						_octree_iterate(depth + 1, cell_pos)
+					else:
+						@warning_ignore("integer_division")
+						var lod_step := cell_size / chunk_size
+						new_chunk_set.set([Vector3i(cell_pos), lod_step], 0)
+	else:
+		new_chunk_set.set([Vector3i.ZERO, root_node_size / chunk_size], 0)
 
 ## Iterates through new_chunk_set and gives each key a 6-bit value. These are applied to pending and active chunks in reconcile_masks()
 func _find_masks() -> void:

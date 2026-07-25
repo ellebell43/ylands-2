@@ -12,6 +12,7 @@ var total_generations := 0
 var total_generation_time := 0
 var average_generation := 0
 var max_generation := 0
+var chunk_manager: ChunkManager
 
 func _ready() -> void:
 	Utils.chunk_generated.connect(_on_chunk_generated)
@@ -23,17 +24,15 @@ func _process(_delta: float) -> void:
 
 ## Gets the current chunk manager for the player's current world, then get's the key for the chunk the player is currently in. Sets the text of ChunkInfo to show that information on screen.
 func set_chunk_info_label() -> void:
-	var chunk_manager := player.current_world.chunk_manager
+	chunk_manager = player.current_world.chunk_manager
 	if chunk_manager == null:
 		chunk_info_label.text = "chunk_pos: not found.\nlod_step: not found"
 	else:
 		var player_chunk_key := chunk_manager.get_player_chunk_key()
 		if player_chunk_key.size() == 0:
-			chunk_info_label.text = "chunk_pos: not found.\nlod_step: not found"
+			chunk_info_label.text = "Active Chunks: ???"
 		else:
-			var chunk_pos: Vector3i = player_chunk_key[0]
-			var chunk_lod_step: int = player_chunk_key[1]
-			chunk_info_label.text = "chunk_pos: %s\nlod_step: %d" % [str(chunk_pos / 20), chunk_lod_step]
+			chunk_info_label.text = "Active Chunks: %d" % [chunk_manager.active_chunk_set.size()]
 
 func set_coords_label() -> void:
 	var player_pos := Vector3i(player.global_position)
@@ -47,4 +46,7 @@ func _on_chunk_generated(gen_time: int) -> void:
 	total_generations += 1
 
 func _on_update_gen_time_timeout() -> void:
-	gen_time_label.text = "avg_chunk_gen: %d\nmax_chunk_gen: %d" % [total_generation_time / total_generations, max_generation]
+	if total_generations > 0:
+		gen_time_label.text = "Avg. Chunk Gen: %d\nChunkManager process: %d" % [total_generation_time / total_generations, chunk_manager.process_time]
+	else:
+		gen_time_label.text = "Avg. Chunk Gen: ???\nChunkManager process: %d" % [chunk_manager.process_time]

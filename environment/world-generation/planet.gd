@@ -6,7 +6,7 @@ extends Node3D
 ## Determines the world that is generated
 @export var world_seed: int = 1
 ## ChunkManager.chunk_size * 2^size = total_volume. total_volume/2 - 2000 = suface diameter. size = max_octree_depth in the ChunkManager. (ChunkManager.chunk_size = 16). Max terrain height = 2000 above "sea level"
-@export_range(9, 19) var size := 8
+@export_range(9, 19) var size := 9
 # |  size | volume in meters | True  diameter |
 # | ----- | =================| ===============|
 # | 5     | 512              | -              |
@@ -36,10 +36,15 @@ var total_volume: Vector3
 ## The general diameter of the planet mesh: (20 * 2^size) / 2
 var diameter: int
 var floor_distance: int
+var is_current_world := false:
+	set(new_is_current_world):
+		is_current_world = new_is_current_world
+		if chunk_manager != null:
+			chunk_manager.is_current_world = new_is_current_world
 
 func _ready() -> void:
 	# initialize the chunk_manager
-	chunk_manager = ChunkManager.new(player, world_seed, size)
+	chunk_manager = ChunkManager.new(player, world_seed, size, is_current_world)
 	self.add_child(chunk_manager)
 	# determine total volume, planet diameter, and gravity radius from self.size and chunk_manager.chunk_size
 	var volume_length = chunk_manager.chunk_size * pow(2, size)
@@ -98,7 +103,9 @@ func _physics_process(delta: float) -> void:
 func _on_gravity_area_body_entered(body: Node3D) -> void:
 	if body is Player:
 		body.current_world = self
+		self.is_current_world = true
 
 func _on_gravity_area_body_exited(body: Node3D) -> void:
 	if body is Player:
 		body.current_world = null
+		self.is_current_world = false
