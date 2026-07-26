@@ -5,21 +5,21 @@ extends Node3D
 @export var player: Player
 ## Determines the world that is generated
 @export var world_seed: int = 1
-## ChunkManager.chunk_size * 2^size = total_volume. total_volume/2 - 2000 = suface diameter. size = max_octree_depth in the ChunkManager. (ChunkManager.chunk_size = 16). Max terrain height = 2000 above "sea level"
-@export_range(9, 19) var size := 9
+## ChunkManager.chunk_size * 2^size = total_volume. total_volume / 2 - 500 = suface radius. size = max_octree_depth in the ChunkManager. (ChunkManager.chunk_size = 16). Max terrain height = 2000 above "sea level"
+@export_range(7, 19) var size := 7
 # |  size | volume in meters | True  diameter |
 # | ----- | =================| ===============|
 # | 5     | 512              | -              |
-# | 6     | 1,024            | -              |
-# | 7     | 2,048            | -              |
-# | 8     | 4,096            | 96 <-min       |
-# | 9     | 8,192            | 4,196          |
-# | 10    | 16,384           | 12,384         |
-# | 11    | 32,769           | 28,769         |
-# | 12    | 65,536           | 61,536         |
-# | 13    | 131,072          | 127,072        |
-# | 14    | 262,144          | 258,144        |
-# | 15    | 524,288          | 520,288        |
+# | 6     | 1,024            | 24             |
+# | 7     | 2,048            | 1,048 <-min    |
+# | 8     | 4,096            | 3,096          |
+# | 9     | 8,192            | 7,196          |
+# | 10    | 16,384           | 15,384         |
+# | 11    | 32,769           | 31,769         |
+# | 12    | 65,536           | 64,536         |
+# | 13    | 131,072          | 130,072        |
+# | 14    | 262,144          | 261,144        |
+# | 15    | 524,288          | 523,288        |
 # | 20    | 16,777,216       | <- Earth is ~12,756,000
 ## How quickly the planet rotates in radians/sec
 @export var rotation_speed := 0.04
@@ -48,14 +48,15 @@ func _ready() -> void:
 	self.add_child(chunk_manager)
 	# determine total volume, planet diameter, and gravity radius from self.size and chunk_manager.chunk_size
 	var volume_length = chunk_manager.chunk_size * pow(2, size)
-	print("Planet ", self.name, " size: ", volume_length)
+	print("Planet %s diameter: %dkm" % [self.name, volume_length - 1000])
 	total_volume = Vector3(volume_length, volume_length, volume_length)
 	diameter = volume_length
 	# gravity extends 500m beyond the surface of the planet
 	gravity_shape.shape.radius = (diameter / 2) + 500
 	# set the chunk_manager position so that the planet mesh is center at the node origin
 	chunk_manager.position = - total_volume / 2
-	floor_distance = (diameter / 2) - 2000
+	floor_distance = (diameter / 2) - 500
+	print("floor_distance: ", floor_distance)
 
 ## The number of tries there has been to find a valid spawn point.
 var n_tries = 0

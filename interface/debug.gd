@@ -37,8 +37,10 @@ func set_chunk_info_label() -> void:
 func set_coords_label() -> void:
 	var player_pos := Vector3i(player.global_position)
 	var player_planet_pos := Vector3i(player.current_world.to_local(player.global_position))
-	var current_world_name := player.current_world.name
-	coords_label.text = "planet: %s\nglobal_pos: %s\nlocal_pos: %s" % [current_world_name, str(player_pos), str(player_planet_pos)]
+	var current_world := player.current_world
+	var world_center := current_world.global_position
+	var player_height: int = world_center.distance_to(player_pos)
+	coords_label.text = "Planet: %s\nDistance to Center: %s\nlocal_pos: %s" % [current_world.name, str(player_height), str(player_planet_pos)]
 
 func _on_chunk_generated(gen_time: int) -> void:
 	if gen_time > max_generation: max_generation = gen_time
