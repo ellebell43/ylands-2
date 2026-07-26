@@ -48,7 +48,6 @@ func _on_chunk_generated(gen_time: int) -> void:
 	total_generations += 1
 
 func _on_update_gen_time_timeout() -> void:
-	if total_generations > 0:
-		gen_time_label.text = "Avg. Chunk Gen: %d\nChunkManager process: %d" % [total_generation_time / total_generations, chunk_manager.process_time]
-	else:
-		gen_time_label.text = "Avg. Chunk Gen: ???\nChunkManager process: %d" % [chunk_manager.process_time]
+	if total_generations > 0 and chunk_manager != null:
+		#var octree_iterate_percent := float(chunk_manager.process_time)
+		gen_time_label.text = "Avg. Chunk Gen: %d" % [total_generation_time / total_generations] + chunk_manager.get_timing_snapshot()

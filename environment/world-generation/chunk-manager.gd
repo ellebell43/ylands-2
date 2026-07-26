@@ -47,6 +47,12 @@ var ready_to_die_chunk_set: Dictionary[Array, Chunk] = {}
 var process_time := 0
 var total_chunk_gen_time := 0
 var total_chunks := 0
+var octree_iterate_time := 0
+var find_masks_time := 0
+var load_new_chunks_time := 0
+var mark_retirees_time := 0
+var check_retirees_time := 0
+var kill_dead_chunks_time := 0
 
 # ========== NODE INITIALIZATION ==========
 
@@ -62,6 +68,22 @@ func _ready() -> void:
 	# if global Util.debug is true, print total chunk count volume
 	if Utils.debug: print("Chunk manager ready. Total chunk count: ", int(pow(chunk_count, 3)))
 
+func get_timing_snapshot() -> String:
+	return "
+	ChunkManager process: %d
+	Octree iterate: %d
+	Find Masks: %d
+	Load Chunks: %d
+	Mark Retirees: %d 
+	Check Retirees: %d: 
+	Kill Chunks: %d " % [
+		process_time, 
+		octree_iterate_time,
+		find_masks_time,
+		load_new_chunks_time,
+		mark_retirees_time,
+		check_retirees_time,
+		kill_dead_chunks_time]
 # ========== PROCESS FUNCTION ==========
 
 func _process(_delta: float) -> void:
@@ -69,27 +91,39 @@ func _process(_delta: float) -> void:
 	# If a player position hasn't been recorded yet, iterate through the octree for the first time, compare leaf sets (loads new_chunk_set into current_chunk_set to load chunks in), and record player position
 	if not first_iteration_complete:
 		_octree_iterate()
+		octree_iterate_time = Time.get_ticks_usec() - start_time
 		_find_masks()
 		_load_new_chunks()
 		total_first_tasks = pending_tasks.size()
 		if player.spawn_world == self.get_parent():
 			Utils.emit_signal("chunk_task_count_found", total_first_tasks)
-		prev_player_pos = player.position
+		prev_player_pos = to_local(player.global_position)
 		first_iteration_complete = true
 	# When the player passes the movement threshold, store the new position, clear the new leaf set, re-iterate through the octree, and compare leaf sets to update chunks
-	if player.position.distance_to(prev_player_pos) >= player_movement_threshold and is_current_world:
-		prev_player_pos = player.position
+	if to_local(player.global_position).distance_to(prev_player_pos) >= player_movement_threshold and is_current_world:
+		prev_player_pos = to_local(player.global_position)
 		new_chunk_set.clear()
 		if is_current_world: _octree_iterate()
 		else: _octree_iterate(max_octree_depth - 2)
+		octree_iterate_time = Time.get_ticks_usec() - start_time
+		var start_time_a := Time.get_ticks_usec()
 		_find_masks()
+		find_masks_time = Time.get_ticks_usec() - start_time_a
+		start_time_a = Time.get_ticks_usec()
 		_load_new_chunks()
+		load_new_chunks_time = Time.get_ticks_usec() - start_time_a
 
 	
-	if first_iteration_complete and WorldNoise and is_current_world:
-		_mark_retiring_chunks()
-		_check_retiring_chunks()
-		_kill_dead_chunks()
+		if WorldNoise and is_current_world:
+			start_time_a = Time.get_ticks_usec()
+			_mark_retiring_chunks()
+			mark_retirees_time = Time.get_ticks_usec() - start_time_a
+			start_time_a = Time.get_ticks_usec()
+			_check_retiring_chunks()
+			check_retirees_time = Time.get_ticks_usec() - start_time_a
+			start_time_a = Time.get_ticks_usec()
+			_kill_dead_chunks()
+			kill_dead_chunks_time = Time.get_ticks_usec() - start_time_a
 
 	# Iterate through pending tasks (created from current_chunk_set chunks; see _load_octree_chunk()) but stop after 3ms
 	const MAXIMUM_BUILD_TIME = 4000 # time in microseconds
