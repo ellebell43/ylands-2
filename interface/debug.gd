@@ -29,7 +29,7 @@ func set_chunk_info_label() -> void:
 		chunk_info_label.text = "chunk_pos: not found.\nlod_step: not found"
 	else:
 		var player_chunk_key := chunk_manager.get_player_chunk_key()
-		if player_chunk_key.size() == 0:
+		if player_chunk_key == Vector4i.ZERO:
 			chunk_info_label.text = "Active Chunks: ???"
 		else:
 			chunk_info_label.text = "Active Chunks: %d" % [chunk_manager.active_chunk_set.size()]
