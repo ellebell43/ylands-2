@@ -26,13 +26,14 @@ func _process(_delta: float) -> void:
 func set_chunk_info_label() -> void:
 	chunk_manager = player.current_world.chunk_manager
 	if chunk_manager == null:
-		chunk_info_label.text = "chunk_pos: not found.\nlod_step: not found"
+		chunk_info_label.text = "chunk manager not found :("
 	else:
 		var player_chunk_key := chunk_manager.get_player_chunk_key()
 		if player_chunk_key == Vector4i.ZERO:
 			chunk_info_label.text = "Active Chunks: ???"
 		else:
-			chunk_info_label.text = "Active Chunks: %d" % [chunk_manager.active_chunk_set.size()]
+			chunk_info_label.text = "FPS: %d
+			Active Chunks: %d" % [Engine.get_frames_per_second(), chunk_manager.active_chunk_set.size()]
 
 func set_coords_label() -> void:
 	var player_pos := Vector3i(player.global_position)

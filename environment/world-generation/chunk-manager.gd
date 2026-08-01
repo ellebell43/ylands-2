@@ -32,6 +32,7 @@ var prev_player_pos: Vector3
 var player_movement_threshold := 10
 ## Whether or not the first octree traversal has completed. When true, chunk life-cycle functions are called
 var first_iteration_complete := false
+var find_masks_task := -1
 
 # ========== CHUNK SET DICTIONARIES ==========
 
@@ -72,18 +73,18 @@ func get_timing_snapshot() -> String:
 	return "
 	ChunkManager process: %d
 	Octree iterate: %d
-	Find Masks: %d
 	Load Chunks: %d
 	Mark Retirees: %d 
 	Check Retirees: %d: 
-	Kill Chunks: %d " % [
+	Kill Chunks: %d
+	Find Masks: %d <- not on main" % [
 		process_time, 
 		octree_iterate_time,
-		find_masks_time,
 		load_new_chunks_time,
 		mark_retirees_time,
 		check_retirees_time,
-		kill_dead_chunks_time]
+		kill_dead_chunks_time,
+		find_masks_time,]
 # ========== PROCESS FUNCTION ==========
 
 func _process(_delta: float) -> void:
@@ -106,24 +107,28 @@ func _process(_delta: float) -> void:
 		if is_current_world: _octree_iterate()
 		else: _octree_iterate(max_octree_depth - 2)
 		octree_iterate_time = Time.get_ticks_usec() - start_time
+		
 		var start_time_a := Time.get_ticks_usec()
-		_find_masks()
-		find_masks_time = Time.get_ticks_usec() - start_time_a
-		start_time_a = Time.get_ticks_usec()
+		if find_masks_task == -1:
+			find_masks_task = WorkerThreadPool.add_task(_find_masks)
+	
+	if find_masks_task != -1 and WorkerThreadPool.is_task_completed(find_masks_task):
+		WorkerThreadPool.wait_for_task_completion(find_masks_task)
+		find_masks_task = -1
+		
+		var start_time_a := Time.get_ticks_usec()
 		_load_new_chunks()
 		load_new_chunks_time = Time.get_ticks_usec() - start_time_a
-
-	
-		if WorldNoise and is_current_world:
-			start_time_a = Time.get_ticks_usec()
-			_mark_retiring_chunks()
-			mark_retirees_time = Time.get_ticks_usec() - start_time_a
-			start_time_a = Time.get_ticks_usec()
-			_check_retiring_chunks()
-			check_retirees_time = Time.get_ticks_usec() - start_time_a
-			start_time_a = Time.get_ticks_usec()
-			_kill_dead_chunks()
-			kill_dead_chunks_time = Time.get_ticks_usec() - start_time_a
+		
+		start_time_a = Time.get_ticks_usec()
+		_mark_retiring_chunks()
+		mark_retirees_time = Time.get_ticks_usec() - start_time_a
+		start_time_a = Time.get_ticks_usec()
+		_check_retiring_chunks()
+		check_retirees_time = Time.get_ticks_usec() - start_time_a
+		start_time_a = Time.get_ticks_usec()
+		_kill_dead_chunks()
+		kill_dead_chunks_time = Time.get_ticks_usec() - start_time_a
 
 	# Iterate through pending tasks (created from current_chunk_set chunks; see _load_octree_chunk()) but stop after 3ms
 	const MAXIMUM_BUILD_TIME = 4000 # time in microseconds
@@ -202,11 +207,13 @@ func _octree_iterate(depth: int = 0, parent_pos: Vector3 = Vector3.ZERO) -> void
 
 ## Iterates through new_chunk_set and gives each key a 6-bit value. These are applied to pending and active chunks in reconcile_masks()
 func _find_masks() -> void:
+	var start_time := Time.get_ticks_usec()
 	for key: Vector4i in new_chunk_set.keys():
 		# mask is a 6-bit value. Each bit represents if a face should have transition cells or not (1 for yes, 0 for no). 
 		# mask bits: x, y, z, -x, -y, -z
 		var mask := 0
-		if key.w == chunk_count: new_chunk_set.set(key, mask); continue
+		if key.w == chunk_count: continue
+		
 		var pos: Vector3i = Vector3i(key.x, key.y, key.z)
 		var lod: int = key.w
 
@@ -225,6 +232,7 @@ func _find_masks() -> void:
 		if z_negative: mask |= (1 << 5)
 
 		new_chunk_set.set(key, mask)
+	find_masks_time = Time.get_ticks_usec() - start_time
 
 func _does_face_need_transition_cells(pos: Vector3i, lod_step: int, direction: Vector3i) -> bool:
 	var coarse_step := lod_step * 2
@@ -424,7 +432,7 @@ func _unload_octree_chunk(key: Vector4i) -> void:
 
 # ========== PUBLIC FUNCTIONS ==========
 
-## Returns an Array: [pos: Vector3, lod_step: int] value which the key of the active chunk that player is in. If no active chunk is found, [] is returned instead.
+## Returns an Vector4i value which is the key of the active chunk that player is in. If no active chunk is found, Vector4i.ZERO is returned instead.
 func get_player_chunk_key() -> Vector4i:
 	var player_pos := to_local(player.global_position)
 	# convert player position to chunk coords
