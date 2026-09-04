@@ -5,7 +5,7 @@ extends Node3D
 @export var player: Player
 ## Determines the world that is generated
 @export var world_seed: int = 1
-## ChunkManager.chunk_size * 2^size = total_volume. total_volume / 2 - 500 = suface radius. size = max_octree_depth in the ChunkManager. (ChunkManager.chunk_size = 16). Max terrain height = 2000 above "sea level"
+## ChunkManager.CHUNK_SIZE * 2^size = total_volume. total_volume / 2 - 500 = surface radius. size = max_octree_depth in the ChunkManager. (ChunkManager.CHUNK_SIZE = 16). Max terrain height = 2000 above surface radius
 @export_range(7, 19) var size := 7
 # |  size | volume in meters | True  diameter |
 # | ----- | =================| ===============|
@@ -21,6 +21,8 @@ extends Node3D
 # | 14    | 262,144          | 261,144        |
 # | 15    | 524,288          | 523,288        |
 # | 20    | 16,777,216       | <- Earth is ~12,756,000
+## Defines the distance from the center of the world the sea level will be. Points below this level are "underwater", points above this level are "above water" (relative to world center). *REMINDER: world mesh diameter is roughly (ChunkManager.CHUNK_SIZE * 2^size) / 2*
+@export var sea_level: int = 520
 ## How quickly the planet rotates in radians/sec
 @export var rotation_speed := 0.04
 ## The axis that the planet spins on
@@ -51,7 +53,7 @@ func _ready() -> void:
 	# gravity extends 1000m beyond the surface of the planet
 	gravity_shape.shape.radius = floor_distance + 1000
 	# initialize the world noise
-	world_noise = WorldNoise.new(world_seed, volume_length, volume_length / 2 - 500)
+	world_noise = WorldNoise.new(world_seed, volume_length, sea_level)
 	# initialize the chunk_manager
 	chunk_manager = ChunkManager.new(player, world_seed, size, world_noise, is_current_world)
 	# set the chunk_manager position so that the planet mesh is center at the node origin
@@ -68,7 +70,6 @@ func get_valid_spawn_point() -> Vector3:
 	n_tries += 1
 	if Utils.debug: print("searching for spawn ", n_tries)
 	# create WorldNoise object with the same seed and size as planet. Cannot use chunk_manager since player may load in before chunk_manager
-	var noise := WorldNoise.new(world_seed, total_volume.x)
 	# get a random direction vector
 	var direction := Vector3(randf(), randf(), randf()).normalized()
 	# get a starting position that is at the center of the volume to start sampling + 1/4 of the way out of the volume
@@ -84,7 +85,7 @@ func get_valid_spawn_point() -> Vector3:
 	# sample scalars from the center of the volume, in random direction, to the edge of the volume and stop when the surface is found and return that value
 	while i < max_steps:
 		var sample_pos = starting_pos + direction * i
-		var sample_scalar = noise.sample(sample_pos.x, sample_pos.y, sample_pos.z)
+		var sample_scalar = world_noise.sample(sample_pos.x, sample_pos.y, sample_pos.z)
 		if i != 1 and prev_scalar < 0 and sample_scalar > 0:
 			if Utils.debug: print("spawn location found: ", sample_pos)
 			return sample_pos - volume_center + direction * 2 + global_position # set spawn to be 2 meters above the point found to ensure player is above the mesh.

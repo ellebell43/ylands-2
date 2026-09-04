@@ -11,7 +11,9 @@ const FLOOR_BIAS := .2
 # Used in Chunk._determine_if_cell_is_empty() to precompute if a cell is empty before sampling.
 const BIAS_THRESHOLD := 1.1
 
-func _init(_seed: int, size: float):
+var sea_level: int
+
+func _init(_seed: int, size: float, _sea_level: int = 1000):
 	# ======= BASE NOISE PROPERTIES =======
 	terrain_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	# Frequency defines a "zoom level" for the noise. the lower the value, the smoother and larger features are. Higher values makes features small and sharp
@@ -36,6 +38,8 @@ func _init(_seed: int, size: float):
 	## Distance from the center of the volume to the floor. size / 2 = floor at the very edge of the volume
 	floor_distance = (size / 2) - 500
 
+	sea_level = _sea_level
+
 ## Get a noise sample biased towards a world shape at a specific Vec3 of the noise volume
 func sample(x: float, y: float, z: float) -> float:
 	var _sample := terrain_noise.get_noise_3d(x, y, z)
@@ -45,3 +49,8 @@ func sample(x: float, y: float, z: float) -> float:
 
 func get_bias_from_distance(distance: float) -> float:
 	return (distance - floor_distance) * FLOOR_BIAS
+
+func get_biome_color(_pos: Vector3) -> Color:
+	var elevation: float = _pos.distance_to(center)
+	if elevation < sea_level: return Color.BLUE
+	else: return Color.GREEN

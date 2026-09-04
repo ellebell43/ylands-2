@@ -375,6 +375,11 @@ func _generate_mesh_data(corner_samples: PackedFloat32Array, transition_mask: in
 					mesh_vertices.append(vertex_a)
 					mesh_vertices.append(vertex_b)
 					mesh_vertices.append(vertex_c)
+
+					# append colors to colors array
+					mesh_colors.append(scalar.get_biome_color(vertex_a + offset))
+					mesh_colors.append(scalar.get_biome_color(vertex_b + offset))
+					mesh_colors.append(scalar.get_biome_color(vertex_c + offset))
 					
 					# determine normal and append to normals array
 					var normal := - (vertex_b - vertex_a).cross(vertex_c - vertex_a).normalized()
@@ -410,7 +415,7 @@ func _generate_mesh_data(corner_samples: PackedFloat32Array, transition_mask: in
 	surface_arrays.resize(Mesh.ARRAY_MAX)
 	surface_arrays[Mesh.ARRAY_VERTEX] = mesh_vertices
 	surface_arrays[Mesh.ARRAY_NORMAL] = mesh_normals
-	# surface_arrays[Mesh.ARRAY_COLOR] = mesh_colors
+	surface_arrays[Mesh.ARRAY_COLOR] = mesh_colors
 	
 	# create the mesh and assign data to it
 	var array_mesh := ArrayMesh.new()
@@ -502,10 +507,18 @@ func _construct_transition_data(values_arr: PackedFloat32Array, transition_data_
 					mesh_vertices.append(vertex_a)
 					mesh_vertices.append(vertex_b)
 					mesh_vertices.append(vertex_c)
+
+					mesh_colors.append(scalar.get_biome_color(vertex_a + offset))
+					mesh_colors.append(scalar.get_biome_color(vertex_b + offset))
+					mesh_colors.append(scalar.get_biome_color(vertex_c + offset))
 				else:
 					mesh_vertices.append(vertex_a)
 					mesh_vertices.append(vertex_c)
 					mesh_vertices.append(vertex_b)
+
+					mesh_colors.append(scalar.get_biome_color(vertex_a + offset))
+					mesh_colors.append(scalar.get_biome_color(vertex_b + offset))
+					mesh_colors.append(scalar.get_biome_color(vertex_c + offset))
 					
 				# determine normal and append to normals array
 				var normal: Vector3
@@ -587,10 +600,10 @@ func build_mesh() -> void:
 	mesh_instance.name = "ChunkMesh"
 	mesh_instance.mesh = mesh_data
 	if wireframe_mode: mesh_instance.material_override = wireframe_material
-	# else:
-	# 	var material = StandardMaterial3D.new()
-	# 	material.vertex_color_use_as_albedo = true
-	# 	mesh_instance.material_override = material
+	else:
+		var material = StandardMaterial3D.new()
+		material.vertex_color_use_as_albedo = true
+		mesh_instance.material_override = material
 	
 	if lod_step == 1:
 		mesh_instance.create_trimesh_collision()
