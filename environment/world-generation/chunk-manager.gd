@@ -2,7 +2,7 @@ extends Node3D
 class_name ChunkManager
 
 ## The size of each chunk in meters
-var chunk_size := 16
+const CHUNK_SIZE := 16
 ## The number of chunks on each axis. Determined from passed in _max_octree_depth in _init()
 var chunk_count: int
 ## Scalar field that is used to determine the shape of the mesh along the chunks.
@@ -22,7 +22,7 @@ var total_first_tasks: int
 var tasks_emitted := 0
 ## How eagerly chunks split into finer chunks. The higher the number, the greater the distance gate to determine how fine the chunk is. 
 var distance_factor := 2
-## The total size of the noise volume, and therefore the size of the root octree node. Where the entire volume is treated as 1 chunk_size chunk
+## The total size of the noise volume, and therefore the size of the root octree node. Where the entire volume is treated as 1 CHUNK_SIZE chunk
 var root_node_size: int
 ## The maximum depth that the octree will go to. Same as Planet.size. (20 * 2^size = WorldNoise.size)
 var max_octree_depth: int
@@ -57,12 +57,12 @@ var kill_dead_chunks_time := 0
 
 # ========== NODE INITIALIZATION ==========
 
-func _init(_player: Player, _seed: int, _max_octree_depth: int, _is_current_world := false) -> void:
+func _init(_player: Player, _seed: int, _max_octree_depth: int, _noise: WorldNoise, _is_current_world := false) -> void:
 	self.max_octree_depth = _max_octree_depth
 	self.chunk_count = int(pow(2, max_octree_depth))
-	self.noise = WorldNoise.new(_seed, chunk_size * pow(2, max_octree_depth))
+	self.noise = _noise
 	self.player = _player
-	self.root_node_size = int(chunk_size * pow(2, max_octree_depth))
+	self.root_node_size = int(CHUNK_SIZE * pow(2, max_octree_depth))
 	self.is_current_world = _is_current_world
 
 func _ready() -> void:
@@ -78,13 +78,13 @@ func get_timing_snapshot() -> String:
 	Check Retirees: %d: 
 	Kill Chunks: %d
 	Find Masks: %d <- not on main" % [
-		process_time, 
+		process_time,
 		octree_iterate_time,
 		load_new_chunks_time,
 		mark_retirees_time,
 		check_retirees_time,
 		kill_dead_chunks_time,
-		find_masks_time,]
+		find_masks_time, ]
 # ========== PROCESS FUNCTION ==========
 
 func _process(_delta: float) -> void:
@@ -200,10 +200,10 @@ func _octree_iterate(depth: int = 0, parent_pos: Vector3 = Vector3.ZERO) -> void
 						_octree_iterate(depth + 1, cell_pos)
 					else:
 						@warning_ignore("integer_division")
-						var lod_step := cell_size / chunk_size
+						var lod_step := cell_size / CHUNK_SIZE
 						new_chunk_set.set(Vector4i(cell_pos.x, cell_pos.y, cell_pos.z, lod_step), 0)
 	else:
-		new_chunk_set.set(Vector4i(0, 0, 0, root_node_size / chunk_size), 0)
+		new_chunk_set.set(Vector4i(0, 0, 0, root_node_size / CHUNK_SIZE), 0)
 
 ## Iterates through new_chunk_set and gives each key a 6-bit value. These are applied to pending and active chunks in reconcile_masks()
 func _find_masks() -> void:
@@ -236,8 +236,8 @@ func _find_masks() -> void:
 
 func _does_face_need_transition_cells(pos: Vector3i, lod_step: int, direction: Vector3i) -> bool:
 	var coarse_step := lod_step * 2
-	var coarse_length := coarse_step * chunk_size
-	var fine_length := lod_step * chunk_size
+	var coarse_length := coarse_step * CHUNK_SIZE
+	var fine_length := lod_step * CHUNK_SIZE
 	# move to the face plane (add fine_length only on positive axes), then step just across it
 	var face_point := Vector3(pos)
 	for axis in 3:
@@ -358,8 +358,8 @@ func _iterate_through_parents(volume_to_add: int, chunk: Chunk = null, key: Vect
 			ready_to_die_chunk_set.set(parent_key, retiring_parent)
 			retiring_chunk_set.erase(parent_key)
 			return
-	elif chunk != null and root_node_size == chunk_size * chunk.lod_step: return
-	elif key != Vector4i.ZERO and root_node_size == chunk_size * key.w: return
+	elif chunk != null and root_node_size == CHUNK_SIZE * chunk.lod_step: return
+	elif key != Vector4i.ZERO and root_node_size == CHUNK_SIZE * key.w: return
 	else:
 		_iterate_through_parents(volume_to_add, null, parent_key)
 
@@ -367,7 +367,7 @@ func _iterate_through_parents(volume_to_add: int, chunk: Chunk = null, key: Vect
 func get_parent_key(chunk: Chunk = null, key: Vector4i = Vector4i.ZERO) -> Vector4i:
 	if chunk != null:
 		var parent_cell_lod_step := chunk.lod_step * 2
-		var parent_cell_size := chunk_size * parent_cell_lod_step
+		var parent_cell_size := CHUNK_SIZE * parent_cell_lod_step
 		var parent_pos_x: int = floor(chunk.position.x / parent_cell_size) * parent_cell_size # using floor() drops the decimal, giving us parent grid space position when we re-multiply by parent_cell_size
 		var parent_pos_y: int = floor(chunk.position.y / parent_cell_size) * parent_cell_size
 		var parent_pos_z: int = floor(chunk.position.z / parent_cell_size) * parent_cell_size
@@ -377,7 +377,7 @@ func get_parent_key(chunk: Chunk = null, key: Vector4i = Vector4i.ZERO) -> Vecto
 
 	elif key != Vector4i.ZERO:
 		var parent_cell_lod_step: int = key.w * 2
-		var parent_cell_size := chunk_size * parent_cell_lod_step
+		var parent_cell_size := CHUNK_SIZE * parent_cell_lod_step
 		var parent_pos_x: int = floor(key.x / parent_cell_size) * parent_cell_size # using floor() drops the decimal, giving us parent grid space position when we re-multiply by parent_cell_size
 		var parent_pos_y: int = floor(key.y / parent_cell_size) * parent_cell_size
 		var parent_pos_z: int = floor(key.z / parent_cell_size) * parent_cell_size
@@ -393,7 +393,7 @@ func _kill_dead_chunks() -> void:
 
 ## Create a new Chunk node, add it to the tree, then set its mesh generation to be outside the main thread.
 func _load_octree_chunk(chunk_pos: Vector3i, lod_step: int) -> void:
-	var new_chunk := Chunk.new(chunk_size, noise, chunk_pos, lod_step)
+	var new_chunk := Chunk.new(CHUNK_SIZE, noise, chunk_pos, lod_step)
 	var chunk_key := Vector4i(chunk_pos.x, chunk_pos.y, chunk_pos.z, lod_step)
 	new_chunk.desired_transition_mask = new_chunk_set.get(chunk_key)
 	self.add_child(new_chunk)
@@ -436,9 +436,9 @@ func _unload_octree_chunk(key: Vector4i) -> void:
 func get_player_chunk_key() -> Vector4i:
 	var player_pos := to_local(player.global_position)
 	# convert player position to chunk coords
-	var player_chunk_pos := Vector3i(player_pos / chunk_size) * chunk_size
+	var player_chunk_pos := Vector3i(player_pos / CHUNK_SIZE) * CHUNK_SIZE
 	var lod_step := 1
-	var key := Vector4i(player_chunk_pos.x,player_chunk_pos.y,player_chunk_pos.z, lod_step)
+	var key := Vector4i(player_chunk_pos.x, player_chunk_pos.y, player_chunk_pos.z, lod_step)
 	var key_found := false
 	if active_chunk_set.has(key): return key
 	else:

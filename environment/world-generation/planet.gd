@@ -31,6 +31,7 @@ extends Node3D
 
 ## Reference to the local ChunkManager for this planet.
 var chunk_manager: ChunkManager
+var world_noise: WorldNoise
 ## The size of the total noise volume on each axis. Determined by size: Vector3(20 * 2^size)
 var total_volume: Vector3
 ## The general diameter of the planet mesh: (20 * 2^size) / 2
@@ -43,19 +44,20 @@ var is_current_world := false:
 			chunk_manager.is_current_world = new_is_current_world
 
 func _ready() -> void:
-	# initialize the chunk_manager
-	chunk_manager = ChunkManager.new(player, world_seed, size, is_current_world)
-	self.add_child(chunk_manager)
 	# determine total volume, planet diameter, and gravity radius from self.size and chunk_manager.chunk_size
-	var volume_length = chunk_manager.chunk_size * pow(2, size)
-	print("Planet %s diameter: %dkm" % [self.name, volume_length - 1000])
+	var volume_length = ChunkManager.CHUNK_SIZE * pow(2, size)
 	total_volume = Vector3(volume_length, volume_length, volume_length)
-	diameter = volume_length
-	# gravity extends 500m beyond the surface of the planet
-	gravity_shape.shape.radius = (diameter / 2) + 500
+	floor_distance = (volume_length / 2) - 500
+	# gravity extends 1000m beyond the surface of the planet
+	gravity_shape.shape.radius = floor_distance + 1000
+	# initialize the world noise
+	world_noise = WorldNoise.new(world_seed, volume_length, volume_length / 2 - 500)
+	# initialize the chunk_manager
+	chunk_manager = ChunkManager.new(player, world_seed, size, world_noise, is_current_world)
 	# set the chunk_manager position so that the planet mesh is center at the node origin
 	chunk_manager.position = - total_volume / 2
-	floor_distance = (diameter / 2) - 500
+	self.add_child(chunk_manager)
+	print("Planet %s diameter: %dkm" % [self.name, volume_length - 1000])
 	print("floor_distance: ", floor_distance)
 
 ## The number of tries there has been to find a valid spawn point.
